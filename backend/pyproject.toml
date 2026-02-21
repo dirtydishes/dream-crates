@@ -1,0 +1,25 @@
+[project]
+name = "studiosample-backend"
+version = "0.1.0"
+description = "Backend API and poller for StudioSample"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn>=0.35.0",
+  "httpx[http2]>=0.28.0",
+  "pyjwt[crypto]>=2.10.0",
+  "pydantic>=2.11.0",
+  "pydantic-settings>=2.10.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["backend*", "tests*"]

@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Local runtime data
+data/
+backend/data/
+backend/backend/data/
+
+# macOS
+.DS_Store
