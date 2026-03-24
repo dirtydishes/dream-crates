@@ -57,7 +57,7 @@ final class PlaybackController: ObservableObject {
             guard let sourceURL = URL(string: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3") else {
                 return .commandFailed
             }
-            self.play(title: "StudioSample", sourceURL: sourceURL, rate: self.rate)
+            self.play(title: "Dream Crates", sourceURL: sourceURL, rate: self.rate)
             return .success
         }
 
@@ -78,7 +78,7 @@ final class PlaybackController: ObservableObject {
 
     private func updateNowPlaying(title: String?) {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [
-            MPMediaItemPropertyTitle: title ?? "StudioSample",
+            MPMediaItemPropertyTitle: title ?? "Dream Crates",
             MPNowPlayingInfoPropertyPlaybackRate: rate,
         ]
     }

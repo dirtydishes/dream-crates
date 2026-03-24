@@ -24,7 +24,9 @@ targets:
           - fetch
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
-        NSUserTrackingUsageDescription: "StudioSample does not track you across apps."
+        CFBundleDisplayName: "Dream Crates"
+        NSHumanReadableCopyright: "Copyright © 2026 deepdream llc"
+        NSUserTrackingUsageDescription: "Dream Crates does not track you across apps."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dreamcrates.studiosample

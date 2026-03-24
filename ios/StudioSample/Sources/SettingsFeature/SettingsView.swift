@@ -9,7 +9,7 @@ struct SettingsView: View {
             Form {
                 Toggle("Notifications", isOn: $notificationsEnabled)
                 Toggle("Quiet Hours", isOn: $quietHoursEnabled)
-                Text("StudioSample v1 (internal)")
+                Text("Dream Crates v1 (internal)")
                     .foregroundStyle(.secondary)
             }
             .navigationTitle("Settings")

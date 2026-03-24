@@ -1,13 +1,28 @@
-# StudioSample Backend Scaffold
+# Dream Crates Backend
 
 ## Run locally
 
 ```bash
-cd backend
+cd /Users/kell/dev/dream-crates/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 uvicorn app.main:app --reload
+```
+
+## Environment setup
+Copy `.env.example` to `.env` and fill secrets:
+
+```bash
+cd /Users/kell/dev/dream-crates/backend
+cp .env.example .env
+```
+
+## Tests
+
+```bash
+cd /Users/kell/dev/dream-crates/backend
+./scripts/run-tests.sh
 ```
 
 ## Key endpoints (v1 scaffold)
@@ -31,3 +46,6 @@ Set these environment variables to enable live push delivery:
 - `STUDIO_APNS_USE_SANDBOX=true` (or `false` for production APNs)
 
 When APNs is not configured, notification events are still recorded with `skipped_unconfigured` status for observability.
+
+## Testing Policy
+Use `/Users/kell/dev/dream-crates/testing.md` for device-first testing guidance.

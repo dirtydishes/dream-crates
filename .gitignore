@@ -11,3 +11,9 @@ backend/backend/data/
 
 # macOS
 .DS_Store
+
+# Xcode local artifacts
+build/
+DerivedData/
+*.xcresult
+ios/StudioSample/StudioSample.xcodeproj/project.xcworkspace/xcuserdata/
