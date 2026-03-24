@@ -18,7 +18,7 @@ DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-/tmp/StudioSampleDerived}"
 DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-6263528F3C}"
 
 if [[ -z "$DEVICE_ID" ]]; then
-  DEVICE_ID="$(xcodebuild -showdestinations -project StudioSample.xcodeproj -scheme "$SCHEME" \
+  DEVICE_ID="$(xcodebuild -showdestinations -project 'dream crates.xcodeproj' -scheme "$SCHEME" \
     | awk -v target_name="$DEVICE_NAME" -F'id:' '$0 ~ "platform:iOS" && $0 ~ ("name:" target_name) {print $2; exit}' \
     | cut -d',' -f1 \
     | xargs)"
@@ -30,7 +30,7 @@ if [[ -z "$DEVICE_ID" ]]; then
 fi
 
 XCODEBUILD_ARGS=(
-  -project StudioSample.xcodeproj
+  -project 'dream crates.xcodeproj'
   -scheme "$SCHEME"
   -destination "id=${DEVICE_ID}"
   -derivedDataPath "$DERIVED_DATA_PATH"

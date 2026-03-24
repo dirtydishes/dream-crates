@@ -1,4 +1,4 @@
-name: StudioSample
+name: dream crates
 options:
   bundleIdPrefix: com.dreamcrates
   deploymentTarget:

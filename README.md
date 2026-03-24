@@ -22,7 +22,7 @@ uvicorn app.main:app --reload
 ```bash
 cd /Users/kell/dev/dream-crates/ios/StudioSample
 xcodegen generate
-xcodebuild -project StudioSample.xcodeproj -scheme StudioSampleApp -destination 'generic/platform=iOS' build
+xcodebuild -project 'dream crates.xcodeproj' -scheme StudioSampleApp -destination 'generic/platform=iOS' build
 ```
 
 ## Device-First Workflow

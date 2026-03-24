@@ -12,7 +12,7 @@ This project should **not** rely on full iOS Simulator launches by default.
    ```bash
    cd /Users/kell/dev/dream-crates/ios/StudioSample
    xcodegen generate
-   xcodebuild -project StudioSample.xcodeproj -scheme StudioSampleApp -destination 'generic/platform=iOS' build
+   xcodebuild -project 'dream crates.xcodeproj' -scheme StudioSampleApp -destination 'generic/platform=iOS' build
    ```
 3. Prefer real-device validation for runtime behavior:
    ```bash
@@ -40,7 +40,7 @@ Install and launch on connected local devices, not simulator.
 cd /Users/kell/dev/dream-crates/ios/StudioSample
 xcodegen generate
 xcodebuild \
-  -project StudioSample.xcodeproj \
+  -project 'dream crates.xcodeproj' \
   -scheme StudioSampleApp \
   -configuration Debug \
   -destination 'id=00008110-001A40DC0E79401E' \
@@ -63,7 +63,7 @@ xcrun devicectl device process launch \
 cd /Users/kell/dev/dream-crates/ios/StudioSample
 xcodegen generate
 xcodebuild \
-  -project StudioSample.xcodeproj \
+  -project 'dream crates.xcodeproj' \
   -scheme StudioSampleApp \
   -configuration Debug \
   -destination 'id=00008122-001665562E61801C' \

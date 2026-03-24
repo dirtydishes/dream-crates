@@ -15,14 +15,14 @@ SCHEME="${SCHEME:-StudioSampleApp}"
 DESTINATION_ID="${DESTINATION_ID:-}"
 
 if [[ -z "$DESTINATION_ID" ]]; then
-  DESTINATION_ID="$(xcodebuild -showdestinations -project StudioSample.xcodeproj -scheme "$SCHEME" \
+  DESTINATION_ID="$(xcodebuild -showdestinations -project 'dream crates.xcodeproj' -scheme "$SCHEME" \
     | awk -F'id:' '/platform:iOS Simulator/ && $0 !~ /placeholder/ && $0 ~ /name:iPhone/{print $2; exit}' \
     | cut -d',' -f1 \
     | xargs)"
 fi
 
 if [[ -z "$DESTINATION_ID" ]]; then
-  DESTINATION_ID="$(xcodebuild -showdestinations -project StudioSample.xcodeproj -scheme "$SCHEME" \
+  DESTINATION_ID="$(xcodebuild -showdestinations -project 'dream crates.xcodeproj' -scheme "$SCHEME" \
     | awk -F'id:' '/platform:iOS Simulator/ && $0 !~ /placeholder/{print $2; exit}' \
     | cut -d',' -f1 \
     | xargs)"
@@ -35,7 +35,7 @@ fi
 
 set -x
 xcodebuild \
-  -project StudioSample.xcodeproj \
+  -project 'dream crates.xcodeproj' \
   -scheme "$SCHEME" \
   -destination "id=${DESTINATION_ID}" \
   test

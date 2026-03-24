@@ -7,7 +7,7 @@ Generated with XcodeGen (`project.yml`) for iPhone-first development.
 ```bash
 cd /Users/kell/dev/dream-crates/ios/StudioSample
 xcodegen generate
-xcodebuild -project StudioSample.xcodeproj -scheme StudioSampleApp -destination 'generic/platform=iOS' build
+xcodebuild -project 'dream crates.xcodeproj' -scheme StudioSampleApp -destination 'generic/platform=iOS' build
 ./scripts/list-destinations.sh
 ./scripts/test-device.sh
 ./scripts/install-device.sh
@@ -21,7 +21,7 @@ Script overrides:
 ## Device Deploy/Test Runbook (`kellcd`)
 
 ### 1) One-time Xcode signing setup
-1. Open `StudioSample.xcodeproj` in Xcode.
+1. Open `dream crates.xcodeproj` in Xcode.
 2. Xcode -> Settings -> Accounts: sign in with the Apple ID for team `6263528F3C`.
 3. In target `StudioSampleApp`:
    - Signing -> `Automatically manage signing` = enabled

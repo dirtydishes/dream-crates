@@ -16,4 +16,4 @@ backend/backend/data/
 build/
 DerivedData/
 *.xcresult
-ios/StudioSample/StudioSample.xcodeproj/project.xcworkspace/xcuserdata/
+ios/StudioSample/*.xcodeproj/project.xcworkspace/xcuserdata/

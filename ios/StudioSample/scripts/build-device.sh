@@ -13,7 +13,7 @@ DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-/tmp/StudioSampleDerived}"
 xcodegen generate >/dev/null
 
 if [[ -z "$DEVICE_ID" ]]; then
-  DEVICE_ID="$(xcodebuild -showdestinations -project StudioSample.xcodeproj -scheme "$SCHEME" \
+  DEVICE_ID="$(xcodebuild -showdestinations -project 'dream crates.xcodeproj' -scheme "$SCHEME" \
     | awk -v target_name="$DEVICE_NAME" -F'id:' '$0 ~ "platform:iOS" && $0 ~ ("name:" target_name) {print $2; exit}' \
     | cut -d',' -f1 \
     | xargs)"
@@ -26,7 +26,7 @@ fi
 
 set -x
 xcodebuild \
-  -project StudioSample.xcodeproj \
+  -project 'dream crates.xcodeproj' \
   -scheme "$SCHEME" \
   -configuration Debug \
   -destination "id=${DEVICE_ID}" \
