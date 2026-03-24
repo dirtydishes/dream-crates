@@ -2,8 +2,8 @@ import SwiftUI
 
 struct PlayerView: View {
     @EnvironmentObject private var store: SampleLibraryStore
+    @EnvironmentObject private var playbackPreferences: PlaybackPreferencesStore
 
-    @State private var speed: Double = 1.0
     @State private var rotation: Double = 0
     @State private var spinner: Task<Void, Never>?
     @StateObject private var playback = PlaybackController()
@@ -63,7 +63,7 @@ struct PlayerView: View {
                 Menu {
                     ForEach(stride(from: 0.5, through: 2.0, by: 0.25).map { $0 }, id: \.self) { value in
                         Button(String(format: "%.2fx", value)) {
-                            speed = value
+                            playbackPreferences.speed = value
                             playback.updateRate(Float(value))
                         }
                     }
@@ -88,8 +88,11 @@ struct PlayerView: View {
         .background(AppTheme.bg)
         .onAppear {
             playback.configureIfNeeded()
+            playback.updateRate(Float(speed))
         }
     }
+
+    private var speed: Double { playbackPreferences.speed }
 
     private func startSpinning() {
         spinner?.cancel()

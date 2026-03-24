@@ -33,6 +33,15 @@ class PushDispatcher:
                     )
                     continue
 
+                if not device["apns_token"]:
+                    self.store.record_notification_event(
+                        device_id=device["device_id"],
+                        sample_id=sample.id,
+                        title=sample.title,
+                        status="skipped_missing_token",
+                    )
+                    continue
+
                 apns_result = self.apns_client.send_new_sample(
                     device_token=device["apns_token"],
                     sample_id=sample.id,

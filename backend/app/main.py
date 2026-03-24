@@ -5,13 +5,18 @@ from fastapi import FastAPI, HTTPException
 from app.config import settings
 from app.models import (
     Channel,
+    DevicePreferencesResponse,
     DeviceRegistrationRequest,
+    DownloadPrepareResponse,
     DownloadPrepareRequest,
+    PlaybackResolveResponse,
     PlaybackResolveRequest,
     PreferencesUpdateRequest,
 )
+from app.services.device_notifications import DeviceNotificationService
 from app.services.apns import APNSClient
 from app.services.push import PushDispatcher
+from app.services.resolver import PlaybackResolver
 from app.services.store import SampleStore
 from app.services.tagging import RulesTagger
 from app.services.youtube_poller import YouTubePoller
@@ -34,6 +39,12 @@ apns_client = APNSClient(
     use_sandbox=settings.apns_use_sandbox,
 )
 push_dispatcher = PushDispatcher(store=store, apns_client=apns_client)
+notification_service = DeviceNotificationService(store=store)
+resolver = PlaybackResolver(
+    command_template=settings.resolver_command,
+    fallback_url=settings.resolver_fallback_url,
+    ttl_seconds=settings.resolver_ttl_seconds,
+)
 
 DEFAULT_CHANNELS: list[Channel] = [
     Channel(id="UCs_1dV9bN0wQhQ_a9W8wO4Q", handle="@andrenavarroII", title="andrenavarroII", is_tracked=True),
@@ -88,25 +99,39 @@ async def put_library(device_id: str, sample_id: str, saved: bool = True):
     return {"sampleId": sample_id, "saved": saved}
 
 
-@app.post("/v1/playback/resolve")
+@app.post("/v1/playback/resolve", response_model=PlaybackResolveResponse)
 async def resolve_playback(body: PlaybackResolveRequest):
-    raise HTTPException(
-        status_code=501,
-        detail=f"Resolver not implemented yet for {body.sample_id}; tracked under task T6/T7",
+    sample = store.get_sample(body.sample_id)
+    if sample is None:
+        raise HTTPException(status_code=404, detail=f"Unknown sample: {body.sample_id}")
+
+    resolved = resolver.resolve_stream(sample)
+    return PlaybackResolveResponse(
+        sample_id=body.sample_id,
+        playback_url=resolved.url,
+        expires_at=resolved.expires_at,
+        source=resolved.source,
     )
 
 
-@app.post("/v1/download/prepare")
+@app.post("/v1/download/prepare", response_model=DownloadPrepareResponse)
 async def prepare_download(body: DownloadPrepareRequest):
-    return {
-        "sampleId": body.sample_id,
-        "downloadURL": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    }
+    sample = store.get_sample(body.sample_id)
+    if sample is None:
+        raise HTTPException(status_code=404, detail=f"Unknown sample: {body.sample_id}")
+
+    resolved = resolver.resolve_download(sample)
+    return DownloadPrepareResponse(
+        sample_id=body.sample_id,
+        download_url=resolved.url,
+        expires_at=resolved.expires_at,
+        source=resolved.source,
+    )
 
 
 @app.post("/v1/devices/register")
 async def register_device(body: DeviceRegistrationRequest):
-    store.register_device(
+    notification_service.register_device(
         device_id=body.device_id,
         apns_token=body.apns_token,
         notifications_enabled=body.notifications_enabled,
@@ -116,9 +141,20 @@ async def register_device(body: DeviceRegistrationRequest):
     return {"registered": True, "deviceId": body.device_id}
 
 
+@app.get("/v1/users/{device_id}/preferences", response_model=DevicePreferencesResponse)
+async def get_preferences(device_id: str):
+    preferences = notification_service.get_preferences(device_id=device_id)
+    return DevicePreferencesResponse(
+        device_id=device_id,
+        notifications_enabled=preferences.notifications_enabled,
+        quiet_start_hour=preferences.quiet_start_hour,
+        quiet_end_hour=preferences.quiet_end_hour,
+    )
+
+
 @app.put("/v1/users/{device_id}/preferences")
 async def update_preferences(device_id: str, body: PreferencesUpdateRequest):
-    store.update_preferences(
+    notification_service.update_preferences(
         device_id=device_id,
         notifications_enabled=body.notifications_enabled,
         quiet_start_hour=body.quiet_start_hour,

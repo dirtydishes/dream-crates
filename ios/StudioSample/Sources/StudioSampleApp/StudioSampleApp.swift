@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct StudioSampleApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     var body: some Scene {
         WindowGroup {
             RootTabView()
@@ -11,14 +13,24 @@ struct StudioSampleApp: App {
 }
 
 private struct RootTabView: View {
-    @StateObject private var store = SampleLibraryStore(
-        repository: HybridSampleRepository(
-            client: APIClient(
-                baseURL: URL(string: "http://127.0.0.1:8000")!,
-                deviceID: DeviceIdentity.current()
+    @StateObject private var store: SampleLibraryStore
+    @StateObject private var playbackPreferences = PlaybackPreferencesStore()
+    @StateObject private var notificationPreferences: NotificationPreferencesStore
+
+    init() {
+        let client = APIClient(
+            baseURL: URL(string: "http://127.0.0.1:8000")!,
+            deviceID: DeviceIdentity.current()
+        )
+        _store = StateObject(
+            wrappedValue: SampleLibraryStore(
+                repository: HybridSampleRepository(client: client)
             )
         )
-    )
+        _notificationPreferences = StateObject(
+            wrappedValue: NotificationPreferencesStore(apiClient: client)
+        )
+    }
 
     var body: some View {
         TabView {
@@ -44,5 +56,7 @@ private struct RootTabView: View {
         }
         .tint(AppTheme.accent)
         .environmentObject(store)
+        .environmentObject(playbackPreferences)
+        .environmentObject(notificationPreferences)
     }
 }

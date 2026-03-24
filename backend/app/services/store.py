@@ -156,6 +156,36 @@ class SampleStore:
                 (int(saved), datetime.now(timezone.utc).isoformat() if saved else None, sample_id),
             )
 
+    def get_sample(self, sample_id: str) -> SampleItem | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, youtube_video_id, channel_id, title, description_text,
+                       published_at, artwork_url, is_saved, saved_at,
+                       download_state, stream_state
+                FROM samples
+                WHERE id = ?
+                """,
+                (sample_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        return SampleItem(
+            id=row["id"],
+            youtube_video_id=row["youtube_video_id"],
+            channel_id=row["channel_id"],
+            title=row["title"],
+            description_text=row["description_text"],
+            published_at=datetime.fromisoformat(row["published_at"]),
+            artwork_url=row["artwork_url"],
+            is_saved=bool(row["is_saved"]),
+            saved_at=datetime.fromisoformat(row["saved_at"]) if row["saved_at"] else None,
+            download_state=row["download_state"],
+            stream_state=row["stream_state"],
+        )
+
     def register_device(
         self,
         *,
@@ -225,6 +255,18 @@ class SampleStore:
                 FROM devices
                 """
             ).fetchall()
+
+    def get_device(self, device_id: str) -> sqlite3.Row | None:
+        with self._connect() as conn:
+            return conn.execute(
+                """
+                SELECT device_id, apns_token, notifications_enabled,
+                       quiet_start_hour, quiet_end_hour
+                FROM devices
+                WHERE device_id = ?
+                """,
+                (device_id,),
+            ).fetchone()
 
     def record_notification_event(self, *, device_id: str, sample_id: str, title: str, status: str) -> None:
         with self._connect() as conn:

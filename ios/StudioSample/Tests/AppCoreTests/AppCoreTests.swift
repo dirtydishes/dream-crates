@@ -140,4 +140,31 @@ final class AppCoreTests: XCTestCase {
         XCTAssertEqual(store.samples.first?.downloadState, .downloaded)
         XCTAssertTrue(store.playbackURL(for: "base").path.hasSuffix("base.mp3"))
     }
+
+    @MainActor
+    func testPlaybackSpeedPersistsAcrossStoreInstances() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+
+        let first = PlaybackPreferencesStore(userDefaults: defaults)
+        first.speed = 1.75
+
+        let second = PlaybackPreferencesStore(userDefaults: defaults)
+        XCTAssertEqual(second.speed, 1.75)
+    }
+
+    @MainActor
+    func testNotificationPreferencesPersistLocally() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let client = APIClient(baseURL: URL(string: "http://127.0.0.1:8000")!, deviceID: "device")
+
+        let first = NotificationPreferencesStore(apiClient: client, userDefaults: defaults)
+        first.notificationsEnabled = false
+        first.quietHoursEnabled = false
+
+        let second = NotificationPreferencesStore(apiClient: client, userDefaults: defaults)
+        XCTAssertFalse(second.notificationsEnabled)
+        XCTAssertFalse(second.quietHoursEnabled)
+    }
 }

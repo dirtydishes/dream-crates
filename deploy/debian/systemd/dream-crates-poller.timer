@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Dream Crates poller every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=dream-crates-poller.service
+
+[Install]
+WantedBy=timers.target

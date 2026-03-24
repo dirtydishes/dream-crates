@@ -10,11 +10,56 @@ client = TestClient(app)
 
 
 def test_download_prepare_returns_url():
+    main_mod.store.upsert_samples(
+        [
+            SampleItem(
+                id="sample-1",
+                youtube_video_id="yt-1",
+                channel_id="channel-1",
+                title="Fresh sample",
+                description_text="",
+                published_at=datetime.now(timezone.utc),
+                genre_tags=[],
+                tone_tags=[],
+                is_saved=False,
+                saved_at=None,
+                download_state="not_downloaded",
+                stream_state="idle",
+            )
+        ]
+    )
     response = client.post("/v1/download/prepare", json={"sample_id": "sample-1"})
     assert response.status_code == 200
     payload = response.json()
-    assert payload["sampleId"] == "sample-1"
-    assert payload["downloadURL"].startswith("https://")
+    assert payload["sample_id"] == "sample-1"
+    assert payload["download_url"].startswith("https://")
+    assert payload["source"] in {"fallback", "command"}
+
+
+def test_playback_resolve_returns_url():
+    main_mod.store.upsert_samples(
+        [
+            SampleItem(
+                id="sample-2",
+                youtube_video_id="yt-2",
+                channel_id="channel-1",
+                title="Fresh sample",
+                description_text="",
+                published_at=datetime.now(timezone.utc),
+                genre_tags=[],
+                tone_tags=[],
+                is_saved=False,
+                saved_at=None,
+                download_state="not_downloaded",
+                stream_state="idle",
+            )
+        ]
+    )
+    response = client.post("/v1/playback/resolve", json={"sample_id": "sample-2"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sample_id"] == "sample-2"
+    assert payload["playback_url"].startswith("https://")
 
 
 def test_register_device_and_update_preferences():
@@ -41,6 +86,12 @@ def test_register_device_and_update_preferences():
     )
     assert upd.status_code == 200
     assert upd.json()["updated"] is True
+
+    get_pref = client.get("/v1/users/device-abc/preferences")
+    assert get_pref.status_code == 200
+    payload = get_pref.json()
+    assert payload["notifications_enabled"] is False
+    assert payload["quiet_start_hour"] == 23
 
 
 def test_poll_once_reports_inserted_and_notifications(monkeypatch):

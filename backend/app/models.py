@@ -39,9 +39,23 @@ class DownloadPrepareRequest(BaseModel):
     sample_id: str
 
 
+class PlaybackResolveResponse(BaseModel):
+    sample_id: str
+    playback_url: str
+    expires_at: datetime
+    source: str
+
+
+class DownloadPrepareResponse(BaseModel):
+    sample_id: str
+    download_url: str
+    expires_at: datetime
+    source: str
+
+
 class DeviceRegistrationRequest(BaseModel):
     device_id: str
-    apns_token: str
+    apns_token: str = ""
     notifications_enabled: bool = True
     quiet_start_hour: int | None = Field(default=22, ge=0, le=23)
     quiet_end_hour: int | None = Field(default=8, ge=0, le=23)
@@ -51,3 +65,10 @@ class PreferencesUpdateRequest(BaseModel):
     notifications_enabled: bool = True
     quiet_start_hour: int | None = Field(default=22, ge=0, le=23)
     quiet_end_hour: int | None = Field(default=8, ge=0, le=23)
+
+
+class DevicePreferencesResponse(BaseModel):
+    device_id: str
+    notifications_enabled: bool
+    quiet_start_hour: int | None
+    quiet_end_hour: int | None

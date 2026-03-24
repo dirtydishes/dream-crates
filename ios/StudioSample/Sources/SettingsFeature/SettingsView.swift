@@ -1,18 +1,20 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var notificationsEnabled = true
-    @State private var quietHoursEnabled = true
+    @EnvironmentObject private var notifications: NotificationPreferencesStore
 
     var body: some View {
         NavigationStack {
             Form {
-                Toggle("Notifications", isOn: $notificationsEnabled)
-                Toggle("Quiet Hours", isOn: $quietHoursEnabled)
+                Toggle("Notifications", isOn: $notifications.notificationsEnabled)
+                Toggle("Quiet Hours", isOn: $notifications.quietHoursEnabled)
                 Text("Dream Crates v1 (internal)")
                     .foregroundStyle(.secondary)
             }
             .navigationTitle("Settings")
+            .task {
+                await notifications.bootstrap()
+            }
         }
     }
 }

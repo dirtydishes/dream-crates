@@ -1,0 +1,12 @@
+[Unit]
+Description=Dream Crates poller run
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dream-crates
+Group=dream-crates
+WorkingDirectory=/opt/dream-crates/app/backend
+EnvironmentFile=/etc/dream-crates.env
+ExecStart=/opt/dream-crates/app/backend/.venv/bin/python -c "import asyncio; from app.main import poll_once; asyncio.run(poll_once())"

@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     apns_team_id: str = ""
     apns_private_key_path: str = ""
     apns_use_sandbox: bool = True
+    resolver_command: str = ""
+    resolver_fallback_url: str = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+    resolver_ttl_seconds: int = 3600
 
     model_config = SettingsConfigDict(env_prefix="STUDIO_", env_file=".env", extra="ignore")
 
