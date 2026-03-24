@@ -4,6 +4,8 @@ import Foundation
 protocol SampleRepository {
     func loadInitialFeed() async throws -> [SampleItem]
     func refreshFeed() async throws -> [SampleItem]
+    func loadSavedLibrary() async throws -> [SampleItem]
+    func updateSaved(sampleID: String, saved: Bool) async throws
 }
 
 @MainActor
@@ -36,5 +38,13 @@ final class HybridSampleRepository: SampleRepository {
             // Keep the last known feed for resilient UX.
         }
         return cachedItems
+    }
+
+    func loadSavedLibrary() async throws -> [SampleItem] {
+        try await client.fetchLibrary()
+    }
+
+    func updateSaved(sampleID: String, saved: Bool) async throws {
+        try await client.updateLibrary(sampleID: sampleID, saved: saved)
     }
 }

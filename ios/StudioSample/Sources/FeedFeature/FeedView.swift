@@ -31,7 +31,9 @@ struct FeedView: View {
                             Spacer()
 
                             Button {
-                                store.toggleSaved(sampleID: item.id)
+                                Task {
+                                    await store.toggleSaved(sampleID: item.id)
+                                }
                             } label: {
                                 Image(systemName: item.isSaved ? "bookmark.fill" : "bookmark")
                                     .foregroundStyle(item.isSaved ? AppTheme.accent : .secondary)

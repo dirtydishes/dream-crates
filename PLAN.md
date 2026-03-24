@@ -1,4 +1,4 @@
-# StudioSample v1 - Implementation Plan
+# Dream Crates v1 - Implementation Plan
 
 ## 1) Product Goal
 Build an internal iPhone app in Swift that aggregates recent YouTube uploads from tracked channels, notifies users about new samples, and provides a studio-style listening experience with save-to-library, background playback, speed control, and downloadable offline playback.
@@ -65,35 +65,34 @@ Build an internal iPhone app in Swift that aggregates recent YouTube uploads fro
 ## 5) Delivery Milestones
 
 ### M1 Foundation
-- Repo bootstrap, plan docs, `bd` issue graph.
-- iOS skeleton and backend skeleton.
+- Done: repo bootstrap, plan docs, and base iOS/backend scaffolds.
+- Remaining cleanup tracked in `bd` for naming, deployment, and workflow hardening.
 
 ### M2 Ingestion + Feed
-- YouTube polling worker and dedupe.
-- Feed API + iOS repository/cache.
+- Partial: YouTube polling, dedupe, feed API, and iOS feed loading exist.
+- Remaining: tracked-channel management, stronger local cache, and production deployment.
 
 ### M3 Player Experience
-- Player UI with spinning-record artwork.
-- Decelerating stop animation on pause.
-- Background audio + remote controls + speed.
+- Partial: player UI, record spin/deceleration, background audio, remote controls, and speed changes exist.
+- Remaining: real playback resolver, persisted speed preference, and richer now-playing metadata.
 
 ### M4 Library + Downloads + Offline
-- Save/unsave library behavior.
-- Download manager and offline playback.
+- Partial: save/unsave flows, backend library endpoints, and local offline files exist.
+- Remaining: full backend sync, durable relaunch restore, and resolver-backed download preparation.
 
 ### M5 Notifications + Stabilization
-- APNs device registration + immediate sample pushes.
-- Integration and UI tests, hardening.
+- Partial: backend device registration, preferences, APNs dispatch, and notification event logging exist.
+- Remaining: iOS APNs registration/onboarding, end-to-end push handling, and broader integration/UI coverage.
 
 ## 6) Acceptance Criteria
-1. New tracked-channel upload appears once and triggers one notification.
-2. Save from feed/player appears in Library and persists on relaunch.
-3. Save state remains independent from download state.
-4. Downloaded sample plays fully offline.
-5. Record artwork rotates while playing and decelerates to stop on pause.
-6. Background playback works from lock screen with remote controls.
-7. Speed selection (0.5x-2.0x) applies immediately and persists.
-8. Expired stream URL is refreshed without user-visible failure.
+1. New tracked-channel upload appears once and triggers one notification. Partial backend support exists; full end-to-end device validation remains.
+2. Save from feed/player appears in Library and persists on relaunch. In progress.
+3. Save state remains independent from download state. Covered by unit tests.
+4. Downloaded sample plays fully offline. In progress; durable relaunch restore is being added, resolver-backed preparation still remains.
+5. Record artwork rotates while playing and decelerates to stop on pause. Implemented in current iOS scaffold.
+6. Background playback works from lock screen with remote controls. Implemented at scaffold level; needs device validation.
+7. Speed selection (0.5x-2.0x) applies immediately and persists. Immediate apply exists; persistence still tracked.
+8. Expired stream URL is refreshed without user-visible failure. Not implemented yet.
 
 ## 7) Release Checklist (Internal)
 - Build signed internal app configuration.

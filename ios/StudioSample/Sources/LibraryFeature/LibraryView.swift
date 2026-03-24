@@ -34,7 +34,9 @@ struct LibraryView: View {
                             .buttonStyle(.plain)
 
                             Button {
-                                store.toggleSaved(sampleID: item.id)
+                                Task {
+                                    await store.toggleSaved(sampleID: item.id)
+                                }
                             } label: {
                                 Image(systemName: "bookmark.slash")
                             }

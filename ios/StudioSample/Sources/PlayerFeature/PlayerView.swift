@@ -50,7 +50,7 @@ struct PlayerView: View {
                         let selectedID = selected?.id ?? ""
                         let sourceURL = store.playbackURL(for: selectedID)
                         playback.play(
-                            title: selected?.title ?? "StudioSample",
+                            title: selected?.title ?? "Dream Crates",
                             sourceURL: sourceURL,
                             rate: Float(speed)
                         )
@@ -73,7 +73,9 @@ struct PlayerView: View {
 
                 if let selected {
                     Button {
-                        store.toggleSaved(sampleID: selected.id)
+                        Task {
+                            await store.toggleSaved(sampleID: selected.id)
+                        }
                     } label: {
                         Image(systemName: selected.isSaved ? "bookmark.fill" : "bookmark")
                     }

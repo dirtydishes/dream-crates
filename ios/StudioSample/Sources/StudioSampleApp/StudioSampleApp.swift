@@ -13,7 +13,10 @@ struct StudioSampleApp: App {
 private struct RootTabView: View {
     @StateObject private var store = SampleLibraryStore(
         repository: HybridSampleRepository(
-            client: APIClient(baseURL: URL(string: "http://127.0.0.1:8000")!)
+            client: APIClient(
+                baseURL: URL(string: "http://127.0.0.1:8000")!,
+                deviceID: DeviceIdentity.current()
+            )
         )
     )
 
