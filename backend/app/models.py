@@ -61,6 +61,10 @@ class DeviceRegistrationRequest(BaseModel):
     quiet_end_hour: int | None = Field(default=8, ge=0, le=23)
 
 
+class ChannelsUpdateRequest(BaseModel):
+    channels: list[Channel] = Field(default_factory=list)
+
+
 class PreferencesUpdateRequest(BaseModel):
     notifications_enabled: bool = True
     quiet_start_hour: int | None = Field(default=22, ge=0, le=23)

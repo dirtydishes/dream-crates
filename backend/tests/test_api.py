@@ -94,6 +94,66 @@ def test_register_device_and_update_preferences():
     assert payload["quiet_start_hour"] == 23
 
 
+def test_user_channels_default_to_global_defaults():
+    response = client.get("/v1/users/device-channels-default/channels")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == [
+        {
+            "id": "UCs_1dV9bN0wQhQ_a9W8wO4Q",
+            "handle": "@andrenavarroII",
+            "title": "andrenavarroII",
+            "is_tracked": True,
+        }
+    ]
+
+
+def test_user_channels_can_be_updated_per_device():
+    update = client.put(
+        "/v1/users/device-channels-custom/channels",
+        json={
+            "channels": [
+                {
+                    "id": "channel-1",
+                    "handle": "@channelone",
+                    "title": "Channel One",
+                    "is_tracked": True,
+                },
+                {
+                    "id": "channel-2",
+                    "handle": "@channeltwo",
+                    "title": "Channel Two",
+                    "is_tracked": False,
+                },
+            ]
+        },
+    )
+    assert update.status_code == 200
+    updated_payload = update.json()
+    assert updated_payload == [
+        {
+            "id": "channel-1",
+            "handle": "@channelone",
+            "title": "Channel One",
+            "is_tracked": True,
+        },
+        {
+            "id": "channel-2",
+            "handle": "@channeltwo",
+            "title": "Channel Two",
+            "is_tracked": False,
+        },
+    ]
+
+    get_updated = client.get("/v1/users/device-channels-custom/channels")
+    assert get_updated.status_code == 200
+    assert get_updated.json() == updated_payload
+
+    get_other_device = client.get("/v1/users/device-channels-other/channels")
+    assert get_other_device.status_code == 200
+    assert get_other_device.json()[0]["id"] == "UCs_1dV9bN0wQhQ_a9W8wO4Q"
+
+
 def test_poll_once_reports_inserted_and_notifications(monkeypatch):
     class FakePoller:
         async def poll_all(self, channels):

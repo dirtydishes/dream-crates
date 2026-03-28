@@ -28,6 +28,8 @@ cd /Users/kell/dev/dream-crates/backend
 ## Key endpoints (v1 scaffold)
 - `GET /healthz`
 - `GET /v1/channels/defaults`
+- `GET /v1/users/{deviceId}/channels`
+- `PUT /v1/users/{deviceId}/channels`
 - `GET /v1/samples`
 - `POST /v1/poller/run-once`
 - `GET /v1/tags/taxonomy`
