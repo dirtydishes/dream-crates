@@ -18,6 +18,13 @@ pip install -e .[dev]
 uvicorn app.main:app --reload
 ```
 
+### Backend (Docker + yt-dlp)
+```bash
+cd /Users/kell/dev/dream-crates
+cp deploy/docker/dream-crates.env.example deploy/docker/dream-crates.env
+docker compose up --build -d
+```
+
 ### iOS (build-only)
 ```bash
 cd /Users/kell/dev/dream-crates/ios/StudioSample

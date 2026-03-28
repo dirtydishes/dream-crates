@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - ./deploy/docker/dream-crates.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - dream-crates-data:/data
+    restart: unless-stopped
+
+  poller:
+    build:
+      context: ./backend
+    env_file:
+      - ./deploy/docker/dream-crates.env
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        while true; do
+          python -c "import asyncio; from app.main import poll_once; asyncio.run(poll_once())"
+          sleep "${POLL_INTERVAL_SECONDS:-300}"
+        done
+    volumes:
+      - dream-crates-data:/data
+    restart: unless-stopped
+
+volumes:
+  dream-crates-data:
