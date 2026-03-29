@@ -1,6 +1,7 @@
 {
   "database": "dolt",
-  "jsonl_export": "issues.jsonl",
   "backend": "dolt",
-  "dolt_database": "beads_dream-crates"
+  "dolt_mode": "server",
+  "dolt_database": "beads_dream-crates",
+  "project_id": "bc03fa47-0028-48bc-914b-47d430a5f574"
 }
