@@ -22,6 +22,7 @@ targets:
         UIBackgroundModes:
           - audio
           - fetch
+        DreamCratesAPIBaseURL: "https://samples.dpdrm.com"
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
         CFBundleDisplayName: "Dream Crates"

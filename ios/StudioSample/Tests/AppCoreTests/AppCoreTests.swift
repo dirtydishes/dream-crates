@@ -65,10 +65,6 @@ final class AppCoreTests: XCTestCase {
         )
     }
 
-    func testMockSamplesContainSavedItem() {
-        XCTAssertTrue(MockData.samples.contains(where: { $0.isSaved }))
-    }
-
     @MainActor
     func testSavingDoesNotChangeDownloadState() async {
         let base = makeSample(id: "base", savedAt: nil)
@@ -166,5 +162,63 @@ final class AppCoreTests: XCTestCase {
         let second = NotificationPreferencesStore(apiClient: client, userDefaults: defaults)
         XCTAssertFalse(second.notificationsEnabled)
         XCTAssertFalse(second.quietHoursEnabled)
+    }
+
+    func testBackendFeedPayloadDecodesWithSnakeCaseFields() throws {
+        let payload = """
+        {
+          "items": [
+            {
+              "id": "sample-abc",
+              "youtube_video_id": "abc",
+              "channel_id": "UCs_1dV9bN0wQhQ_a9W8wO4Q",
+              "title": "Dark sample pack",
+              "description_text": "Fresh from the backend",
+              "published_at": "2026-03-29T10:00:00Z",
+              "artwork_url": "https://example.com/thumb.jpg",
+              "duration_seconds": 95,
+              "genre_tags": [
+                { "key": "trap", "confidence": 0.9 }
+              ],
+              "tone_tags": [
+                { "key": "gritty", "confidence": 0.8 }
+              ],
+              "is_saved": true,
+              "saved_at": "2026-03-29T10:05:00Z",
+              "download_state": "not_downloaded",
+              "stream_state": "ready"
+            }
+          ],
+          "nextCursor": 1
+        }
+        """.data(using: .utf8)!
+
+        let response = try APIClient.makeDecoder().decode(FeedResponse.self, from: payload)
+
+        XCTAssertEqual(response.items.count, 1)
+        XCTAssertEqual(response.items.first?.youtubeVideoId, "abc")
+        XCTAssertEqual(response.items.first?.channelId, "UCs_1dV9bN0wQhQ_a9W8wO4Q")
+        XCTAssertEqual(response.items.first?.artworkURL?.absoluteString, "https://example.com/thumb.jpg")
+        XCTAssertEqual(response.items.first?.downloadState, .notDownloaded)
+        XCTAssertEqual(response.items.first?.streamState, .ready)
+        XCTAssertEqual(response.nextCursor, 1)
+    }
+
+    func testDevicePreferencesPayloadDecodesSnakeCaseDeviceID() throws {
+        let payload = """
+        {
+          "device_id": "device-123",
+          "notifications_enabled": true,
+          "quiet_start_hour": 22,
+          "quiet_end_hour": 8
+        }
+        """.data(using: .utf8)!
+
+        let preferences = try APIClient.makeDecoder().decode(DevicePreferencesPayload.self, from: payload)
+
+        XCTAssertEqual(preferences.deviceID, "device-123")
+        XCTAssertTrue(preferences.notificationsEnabled)
+        XCTAssertEqual(preferences.quietStartHour, 22)
+        XCTAssertEqual(preferences.quietEndHour, 8)
     }
 }
