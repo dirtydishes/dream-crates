@@ -264,8 +264,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = BAA2A9C5AB4C970BB0D8C5E1 /* Build configuration list for PBXProject "dream crates" */;
 			developmentRegion = en;
@@ -345,7 +343,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dreamcrates.StudioSampleTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dpdrm.dreamcrates.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StudioSampleApp.app/StudioSampleApp";
@@ -426,7 +424,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dreamcrates.StudioSampleTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dpdrm.dreamcrates.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StudioSampleApp.app/StudioSampleApp";
@@ -500,7 +498,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dreamcrates.studiosample;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dpdrm.dreamcrates;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -517,7 +515,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.dreamcrates.studiosample;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dpdrm.dreamcrates;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
