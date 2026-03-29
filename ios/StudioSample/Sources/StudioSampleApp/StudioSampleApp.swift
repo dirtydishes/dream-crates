@@ -19,7 +19,7 @@ private struct RootTabView: View {
 
     init() {
         let client = APIClient(
-            baseURL: URL(string: "http://127.0.0.1:8000")!,
+            baseURL: AppConfiguration.apiBaseURL,
             deviceID: DeviceIdentity.current()
         )
         _store = StateObject(

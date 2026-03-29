@@ -183,6 +183,7 @@ Current top-level endpoints:
 - `GET /healthz`
 - `GET /v1/channels/defaults`
 - `GET /v1/samples`
+- `POST /v1/admin/poller/backfill`
 - `POST /v1/poller/run-once`
 - `GET /v1/tags/taxonomy`
 - `GET /v1/users/{device_id}/library`
@@ -196,6 +197,7 @@ Current top-level endpoints:
 Notable endpoint behavior:
 
 - `GET /v1/samples` supports `limit`, `cursor`, and optional ISO-8601 `since`
+- `POST /v1/admin/poller/backfill` backfills up to `limit` historical uploads across tracked channels and suppresses notifications unless `send_notifications=true`
 - `POST /v1/poller/run-once` both ingests new uploads and attempts notifications
 - Playback/download prepare endpoints return URLs plus `expires_at` and `source`
 - Library operations are device-scoped at the API layer, but the current backend storage model tracks saved state directly on the sample row

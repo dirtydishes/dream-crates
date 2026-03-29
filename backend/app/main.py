@@ -1,9 +1,11 @@
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 
 from app.config import settings
 from app.models import (
+    BackfillRequest,
+    BackfillResponse,
     Channel,
     ChannelsUpdateRequest,
     DevicePreferencesResponse,
@@ -91,6 +93,19 @@ async def poll_once() -> dict[str, int]:
         "inserted": len(inserted_items),
         "notificationsSent": notifications_sent,
     }
+
+
+@app.post("/v1/admin/poller/backfill", response_model=BackfillResponse)
+async def backfill_poll(body: BackfillRequest = Body(default_factory=BackfillRequest)):
+    result = await poller.backfill_all(DEFAULT_CHANNELS, limit=body.limit)
+    notifications_sent = push_dispatcher.notify_new_samples(result.inserted_items) if body.send_notifications else 0
+    return BackfillResponse(
+        inserted=len(result.inserted_items),
+        notifications_sent=notifications_sent,
+        requested_limit=body.limit,
+        exhausted=result.exhausted,
+        channels_processed=result.channels_processed,
+    )
 
 
 @app.get("/v1/tags/taxonomy")

@@ -43,6 +43,7 @@ Docker deployment details live in `/Users/kell/dev/dream-crates/deploy/docker/RE
 - `GET /v1/users/{deviceId}/channels`
 - `PUT /v1/users/{deviceId}/channels`
 - `GET /v1/samples`
+- `POST /v1/admin/poller/backfill`
 - `POST /v1/poller/run-once`
 - `GET /v1/tags/taxonomy`
 - `GET /v1/users/{deviceId}/library`
@@ -52,6 +53,15 @@ Docker deployment details live in `/Users/kell/dev/dream-crates/deploy/docker/RE
 - `PUT /v1/users/{deviceId}/preferences`
 - `POST /v1/playback/resolve`
 - `POST /v1/download/prepare`
+
+## Backfill endpoint
+
+`POST /v1/admin/poller/backfill` accepts:
+
+- `limit` (default `333`)
+- `send_notifications` (default `false`)
+
+The endpoint pages through YouTube results in batches of 50, keeps ingesting older unseen uploads across tracked channels until it inserts `limit` rows or runs out of history, and only sends notifications when `send_notifications=true`.
 
 ## APNs configuration
 Set these environment variables to enable live push delivery:

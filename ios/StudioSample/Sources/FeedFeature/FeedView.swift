@@ -54,6 +54,12 @@ struct FeedView: View {
             .overlay {
                 if store.isLoading {
                     ProgressView()
+                } else if store.samples.isEmpty {
+                    ContentUnavailableView(
+                        "No Samples Yet",
+                        systemImage: "waveform.badge.exclamationmark",
+                        description: Text("Dream Crates is connected, but the backend has not ingested any channel uploads yet.")
+                    )
                 }
             }
             .task {
