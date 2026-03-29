@@ -6,6 +6,8 @@ protocol SampleRepository {
     func refreshFeed() async throws -> [SampleItem]
     func loadSavedLibrary() async throws -> [SampleItem]
     func updateSaved(sampleID: String, saved: Bool) async throws
+    func resolvePlayback(sampleID: String) async throws -> URL
+    func prepareDownload(sampleID: String) async throws -> URL
 }
 
 @MainActor
@@ -39,6 +41,14 @@ final class HybridSampleRepository: SampleRepository {
 
     func updateSaved(sampleID: String, saved: Bool) async throws {
         try await client.updateLibrary(sampleID: sampleID, saved: saved)
+    }
+
+    func resolvePlayback(sampleID: String) async throws -> URL {
+        try await client.resolvePlayback(sampleID: sampleID).playbackURL
+    }
+
+    func prepareDownload(sampleID: String) async throws -> URL {
+        try await client.prepareDownload(sampleID: sampleID).downloadURL
     }
 
     private func loadRemoteFeed() async throws -> [SampleItem] {

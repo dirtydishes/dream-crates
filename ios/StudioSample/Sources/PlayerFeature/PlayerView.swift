@@ -2,11 +2,11 @@ import SwiftUI
 
 struct PlayerView: View {
     @EnvironmentObject private var store: SampleLibraryStore
+    @EnvironmentObject private var playback: PlaybackController
     @EnvironmentObject private var playbackPreferences: PlaybackPreferencesStore
 
     @State private var rotation: Double = 0
     @State private var spinner: Task<Void, Never>?
-    @StateObject private var playback = PlaybackController()
 
     var body: some View {
         let selected = store.currentSample
@@ -22,6 +22,29 @@ struct PlayerView: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
 
+            if let selected {
+                HStack(spacing: 10) {
+                    UploaderAvatarView(imageURL: selected.channelAvatarURL, fallbackText: selected.uploaderName)
+                        .frame(width: 28, height: 28)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(selected.uploaderName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppTheme.label)
+
+                        if let subtitle = selected.uploaderSubtitle {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AppTheme.panel)
+                .clipShape(Capsule())
+            }
+
             ZStack {
                 Circle()
                     .fill(
@@ -34,6 +57,19 @@ struct PlayerView: View {
                     )
                     .frame(width: 260, height: 260)
                     .overlay(Circle().stroke(AppTheme.accent.opacity(0.6), lineWidth: 2))
+                if let artworkURL = selected?.artworkURL {
+                    AsyncImage(url: artworkURL) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        ProgressView()
+                            .tint(AppTheme.label)
+                    }
+                    .frame(width: 220, height: 220)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
+                }
                 Circle()
                     .fill(AppTheme.accent)
                     .frame(width: 26, height: 26)
@@ -45,20 +81,15 @@ struct PlayerView: View {
                 Button(playback.isPlaying ? "Pause" : "Play") {
                     if playback.isPlaying {
                         playback.pause()
-                        stopSpinning()
-                    } else {
-                        let selectedID = selected?.id ?? ""
-                        let sourceURL = store.playbackURL(for: selectedID)
-                        playback.play(
-                            title: selected?.title ?? "Dream Crates",
-                            sourceURL: sourceURL,
-                            rate: Float(speed)
-                        )
-                        startSpinning()
+                    } else if let selected {
+                        Task {
+                            await play(selected)
+                        }
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.accent)
+                .disabled(selected == nil)
 
                 Menu {
                     ForEach(stride(from: 0.5, through: 2.0, by: 0.25).map { $0 }, id: \.self) { value in
@@ -90,9 +121,30 @@ struct PlayerView: View {
             playback.configureIfNeeded()
             playback.updateRate(Float(speed))
         }
+        .onChange(of: playback.isPlaying) { _, isPlaying in
+            if isPlaying {
+                startSpinning()
+            } else {
+                stopSpinning()
+            }
+        }
     }
 
     private var speed: Double { playbackPreferences.speed }
+
+    private func play(_ item: SampleItem) async {
+        do {
+            let sourceURL = try await store.resolvedPlaybackURL(for: item.id)
+            playback.configureIfNeeded()
+            playback.play(
+                title: item.title,
+                sourceURL: sourceURL,
+                rate: Float(speed)
+            )
+        } catch {
+            playback.pause()
+        }
+    }
 
     private func startSpinning() {
         spinner?.cancel()
@@ -110,6 +162,7 @@ struct PlayerView: View {
 
     private func stopSpinning() {
         spinner?.cancel()
+        guard rotation != 0 else { return }
         withAnimation(.easeOut(duration: 0.85)) {
             rotation += 45
         }

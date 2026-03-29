@@ -123,6 +123,54 @@ struct APIClient {
         }
     }
 
+    func resolvePlayback(sampleID: String) async throws -> PlaybackResolvePayload {
+        let url = baseURL.appending(path: "/v1/playback/resolve")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        applyDefaultHeaders(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(SampleActionPayload(sampleID: sampleID))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
+        }
+
+        return try Self.makeDecoder().decode(PlaybackResolvePayload.self, from: data)
+    }
+
+    func prepareDownload(sampleID: String) async throws -> DownloadPreparePayload {
+        let url = baseURL.appending(path: "/v1/download/prepare")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        applyDefaultHeaders(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(SampleActionPayload(sampleID: sampleID))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
+        }
+
+        return try Self.makeDecoder().decode(DownloadPreparePayload.self, from: data)
+    }
+
     func registerDevice(
         apnsToken: String,
         notificationsEnabled: Bool,
@@ -237,6 +285,42 @@ struct FeedResponse: Codable {
 struct PollOnceResponse: Codable {
     let inserted: Int
     let notificationsSent: Int
+}
+
+private struct SampleActionPayload: Encodable {
+    let sampleID: String
+
+    enum CodingKeys: String, CodingKey {
+        case sampleID = "sample_id"
+    }
+}
+
+struct PlaybackResolvePayload: Decodable {
+    let sampleID: String
+    let playbackURL: URL
+    let expiresAt: Date
+    let source: String
+
+    enum CodingKeys: String, CodingKey {
+        case sampleID = "sample_id"
+        case playbackURL = "playback_url"
+        case expiresAt = "expires_at"
+        case source
+    }
+}
+
+struct DownloadPreparePayload: Decodable {
+    let sampleID: String
+    let downloadURL: URL
+    let expiresAt: Date
+    let source: String
+
+    enum CodingKeys: String, CodingKey {
+        case sampleID = "sample_id"
+        case downloadURL = "download_url"
+        case expiresAt = "expires_at"
+        case source
+    }
 }
 
 private struct DeviceRegistrationRequestPayload: Encodable {

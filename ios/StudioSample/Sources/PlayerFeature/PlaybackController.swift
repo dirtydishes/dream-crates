@@ -8,6 +8,8 @@ final class PlaybackController: ObservableObject {
 
     private let player = AVPlayer()
     private var remoteConfigured = false
+    private var currentTitle = "Dream Crates"
+    private var currentSourceURL: URL?
 
     func configureIfNeeded() {
         guard !remoteConfigured else { return }
@@ -18,6 +20,8 @@ final class PlaybackController: ObservableObject {
 
     func play(title: String, sourceURL: URL, rate: Float) {
         self.rate = rate
+        currentTitle = title
+        currentSourceURL = sourceURL
 
         player.replaceCurrentItem(with: AVPlayerItem(url: sourceURL))
 
@@ -54,10 +58,10 @@ final class PlaybackController: ObservableObject {
 
         commandCenter.playCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
-            guard let sourceURL = URL(string: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3") else {
+            guard let sourceURL = self.currentSourceURL else {
                 return .commandFailed
             }
-            self.play(title: "Dream Crates", sourceURL: sourceURL, rate: self.rate)
+            self.play(title: self.currentTitle, sourceURL: sourceURL, rate: self.rate)
             return .success
         }
 

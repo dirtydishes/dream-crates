@@ -3,13 +3,18 @@ import XCTest
 
 @MainActor
 private final class FakeRepository: SampleRepository {
+    struct OfflineError: Error {}
+
     let items: [SampleItem]
     var savedLibrary: [SampleItem]
     var updatedSavedStates: [(String, Bool)] = []
+    var playbackURL = URL(string: "https://example.com/playback.mp3")!
+    var downloadURL = URL(string: "https://example.com/download.mp3")!
+    var shouldFailUpdates = false
 
-    init(items: [SampleItem], savedLibrary: [SampleItem] = []) {
+    init(items: [SampleItem], savedLibrary: [SampleItem]? = nil) {
         self.items = items
-        self.savedLibrary = savedLibrary
+        self.savedLibrary = savedLibrary ?? items.filter(\.isSaved)
     }
 
     func loadInitialFeed() async throws -> [SampleItem] {
@@ -25,7 +30,20 @@ private final class FakeRepository: SampleRepository {
     }
 
     func updateSaved(sampleID: String, saved: Bool) async throws {
+        if shouldFailUpdates {
+            throw OfflineError()
+        }
         updatedSavedStates.append((sampleID, saved))
+    }
+
+    func resolvePlayback(sampleID: String) async throws -> URL {
+        _ = sampleID
+        return playbackURL
+    }
+
+    func prepareDownload(sampleID: String) async throws -> URL {
+        _ = sampleID
+        return downloadURL
     }
 }
 
@@ -51,6 +69,9 @@ final class AppCoreTests: XCTestCase {
             id: id,
             youtubeVideoId: "yt-\(id)",
             channelId: "channel",
+            channelTitle: "Channel Title",
+            channelHandle: "@channel",
+            channelAvatarURL: nil,
             title: "Sample \(id)",
             descriptionText: "",
             publishedAt: .now,
@@ -60,7 +81,7 @@ final class AppCoreTests: XCTestCase {
             toneTags: [],
             isSaved: savedAt != nil,
             savedAt: savedAt,
-            downloadState: .downloaded,
+            downloadState: .notDownloaded,
             streamState: .ready
         )
     }
@@ -80,7 +101,7 @@ final class AppCoreTests: XCTestCase {
         let updated = try! XCTUnwrap(store.samples.first)
         XCTAssertTrue(updated.isSaved)
         XCTAssertNotNil(updated.savedAt)
-        XCTAssertEqual(updated.downloadState, .downloaded)
+        XCTAssertEqual(updated.downloadState, .notDownloaded)
     }
 
     @MainActor
@@ -104,6 +125,7 @@ final class AppCoreTests: XCTestCase {
         let stateStore = makeLocalStateStore()
 
         let firstRepo = FakeRepository(items: [base])
+        firstRepo.shouldFailUpdates = true
         let firstStore = SampleLibraryStore(repository: firstRepo, localStateStore: stateStore)
         await firstStore.load()
         await firstStore.toggleSaved(sampleID: base.id)
@@ -134,7 +156,8 @@ final class AppCoreTests: XCTestCase {
         await store.load()
 
         XCTAssertEqual(store.samples.first?.downloadState, .downloaded)
-        XCTAssertTrue(store.playbackURL(for: "base").path.hasSuffix("base.mp3"))
+        let resolved = try await store.resolvedPlaybackURL(for: "base")
+        XCTAssertTrue(resolved.path.hasSuffix("base.mp3"))
     }
 
     @MainActor
@@ -172,6 +195,9 @@ final class AppCoreTests: XCTestCase {
               "id": "sample-abc",
               "youtube_video_id": "abc",
               "channel_id": "UCs_1dV9bN0wQhQ_a9W8wO4Q",
+              "channel_title": "andrenavarroII",
+              "channel_handle": "@andrenavarroII",
+              "channel_avatar_url": "https://example.com/avatar.jpg",
               "title": "Dark sample pack",
               "description_text": "Fresh from the backend",
               "published_at": "2026-03-29T10:00:00Z",
@@ -198,6 +224,9 @@ final class AppCoreTests: XCTestCase {
         XCTAssertEqual(response.items.count, 1)
         XCTAssertEqual(response.items.first?.youtubeVideoId, "abc")
         XCTAssertEqual(response.items.first?.channelId, "UCs_1dV9bN0wQhQ_a9W8wO4Q")
+        XCTAssertEqual(response.items.first?.channelTitle, "andrenavarroII")
+        XCTAssertEqual(response.items.first?.channelHandle, "@andrenavarroII")
+        XCTAssertEqual(response.items.first?.channelAvatarURL?.absoluteString, "https://example.com/avatar.jpg")
         XCTAssertEqual(response.items.first?.artworkURL?.absoluteString, "https://example.com/thumb.jpg")
         XCTAssertEqual(response.items.first?.downloadState, .notDownloaded)
         XCTAssertEqual(response.items.first?.streamState, .ready)

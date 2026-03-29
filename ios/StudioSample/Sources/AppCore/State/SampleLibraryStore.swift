@@ -94,9 +94,9 @@ final class SampleLibraryStore: ObservableObject {
         guard let idx = samples.firstIndex(where: { $0.id == sampleID }) else { return }
 
         samples[idx].downloadState = .downloading
-        let sourceURL = URL(string: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")!
 
         do {
+            let sourceURL = try await repository.prepareDownload(sampleID: sampleID)
             let localURL = try await downloadManager.download(sampleID: sampleID, from: sourceURL)
             localFiles[sampleID] = localURL
             samples[idx].downloadState = .downloaded
@@ -105,11 +105,11 @@ final class SampleLibraryStore: ObservableObject {
         }
     }
 
-    func playbackURL(for sampleID: String) -> URL {
+    func resolvedPlaybackURL(for sampleID: String) async throws -> URL {
         if let local = localFiles[sampleID] {
             return local
         }
-        return URL(string: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")!
+        return try await repository.resolvePlayback(sampleID: sampleID)
     }
 
     private func applyPersistedLocalState() {

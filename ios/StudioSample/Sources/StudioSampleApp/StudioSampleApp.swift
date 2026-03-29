@@ -13,6 +13,8 @@ struct StudioSampleApp: App {
 }
 
 private struct RootTabView: View {
+    @StateObject private var appShell = AppShellStore()
+    @StateObject private var playback = PlaybackController()
     @StateObject private var store: SampleLibraryStore
     @StateObject private var playbackPreferences = PlaybackPreferencesStore()
     @StateObject private var notificationPreferences: NotificationPreferencesStore
@@ -35,28 +37,34 @@ private struct RootTabView: View {
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $appShell.selectedTab) {
             FeedView()
+                .tag(AppTab.feed)
                 .tabItem {
                     Label("Feed", systemImage: "waveform")
                 }
 
             PlayerView()
+                .tag(AppTab.player)
                 .tabItem {
                     Label("Player", systemImage: "record.circle")
                 }
 
             LibraryView()
+                .tag(AppTab.library)
                 .tabItem {
                     Label("Library", systemImage: "books.vertical")
                 }
 
             SettingsView()
+                .tag(AppTab.settings)
                 .tabItem {
                     Label("Settings", systemImage: "slider.horizontal.3")
                 }
         }
         .tint(AppTheme.accent)
+        .environmentObject(appShell)
+        .environmentObject(playback)
         .environmentObject(store)
         .environmentObject(playbackPreferences)
         .environmentObject(notificationPreferences)
