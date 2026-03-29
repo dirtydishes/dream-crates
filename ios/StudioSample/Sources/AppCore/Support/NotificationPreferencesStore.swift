@@ -51,9 +51,12 @@ final class NotificationPreferencesStore: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self, let token = notification.object as? String else { return }
-            self.userDefaults.set(token, forKey: Keys.apnsToken)
-            Task { await self.syncRegistration(tokenHex: token) }
+            guard let token = notification.object as? String else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.userDefaults.set(token, forKey: Keys.apnsToken)
+                await self.syncRegistration(tokenHex: token)
+            }
         }
     }
 
