@@ -2,6 +2,11 @@ import Foundation
 
 @MainActor
 final class SampleLibraryStore: ObservableObject {
+    private struct CachedPlaybackURL {
+        let url: URL
+        let cachedAt: Date
+    }
+
     @Published private(set) var samples: [SampleItem] = []
     @Published var currentSampleID: String?
     @Published var isLoading = false
@@ -10,6 +15,9 @@ final class SampleLibraryStore: ObservableObject {
     private let downloadManager: DownloadManager
     private let localStateStore: LocalSampleStateStore
     private var localFiles: [String: URL] = [:]
+    private var cachedPlaybackURLs: [String: CachedPlaybackURL] = [:]
+    private var preloadingPlaybackIDs = Set<String>()
+    private let playbackCacheLifetime: TimeInterval = 15 * 60
 
     init(
         repository: SampleRepository,
@@ -47,6 +55,7 @@ final class SampleLibraryStore: ObservableObject {
             if currentSampleID == nil {
                 currentSampleID = samples.first?.id
             }
+            preloadInitialPlaybackWindow()
         } catch {
             print("DreamCrates SampleLibraryStore load failed: \(error)")
             samples = []
@@ -63,6 +72,7 @@ final class SampleLibraryStore: ObservableObject {
             if currentSampleID == nil {
                 currentSampleID = samples.first?.id
             }
+            preloadInitialPlaybackWindow()
         } catch {
             print("DreamCrates SampleLibraryStore refresh failed: \(error)")
             // Keep current snapshot on refresh errors.
@@ -71,6 +81,7 @@ final class SampleLibraryStore: ObservableObject {
 
     func select(_ sampleID: String) {
         currentSampleID = sampleID
+        preloadPlaybackWindow(around: sampleID)
     }
 
     func toggleSaved(sampleID: String) async {
@@ -109,7 +120,30 @@ final class SampleLibraryStore: ObservableObject {
         if let local = localFiles[sampleID] {
             return local
         }
-        return try await repository.resolvePlayback(sampleID: sampleID)
+
+        if let cached = cachedPlaybackURLs[sampleID], Date().timeIntervalSince(cached.cachedAt) < playbackCacheLifetime {
+            return cached.url
+        }
+
+        let resolved = try await repository.resolvePlayback(sampleID: sampleID)
+        cachedPlaybackURLs[sampleID] = CachedPlaybackURL(url: resolved, cachedAt: .now)
+        return resolved
+    }
+
+    func preloadPlayback(sampleID: String) async {
+        guard localFiles[sampleID] == nil else { return }
+        guard cachedPlaybackURLs[sampleID] == nil else { return }
+        guard !preloadingPlaybackIDs.contains(sampleID) else { return }
+
+        preloadingPlaybackIDs.insert(sampleID)
+        defer { preloadingPlaybackIDs.remove(sampleID) }
+
+        do {
+            let resolved = try await repository.resolvePlayback(sampleID: sampleID)
+            cachedPlaybackURLs[sampleID] = CachedPlaybackURL(url: resolved, cachedAt: .now)
+        } catch {
+            // Ignore preload failures and resolve on demand later.
+        }
     }
 
     private func applyPersistedLocalState() {
@@ -200,6 +234,22 @@ final class SampleLibraryStore: ObservableObject {
             updated.isSaved = prior.0
             updated.savedAt = prior.1
             return updated
+        }
+    }
+
+    private func preloadInitialPlaybackWindow() {
+        for sampleID in samples.prefix(3).map(\.id) {
+            Task { await preloadPlayback(sampleID: sampleID) }
+        }
+    }
+
+    private func preloadPlaybackWindow(around sampleID: String) {
+        guard let index = samples.firstIndex(where: { $0.id == sampleID }) else { return }
+        let lowerBound = max(samples.startIndex, index - 1)
+        let upperBound = min(samples.index(before: samples.endIndex), index + 2)
+        for idx in lowerBound ... upperBound {
+            let preloadID = samples[idx].id
+            Task { await preloadPlayback(sampleID: preloadID) }
         }
     }
 }

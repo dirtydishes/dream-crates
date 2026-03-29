@@ -7,6 +7,8 @@ struct PlayerView: View {
 
     @State private var rotation: Double = 0
     @State private var spinner: Task<Void, Never>?
+    @State private var scrubPosition: Double = 0
+    @State private var isScrubbing = false
 
     var body: some View {
         let selected = store.currentSample
@@ -77,10 +79,38 @@ struct PlayerView: View {
             .rotationEffect(.degrees(rotation))
             .shadow(color: .black.opacity(0.4), radius: 20, x: 0, y: 12)
 
+            VStack(spacing: 8) {
+                Slider(
+                    value: Binding(
+                        get: { isScrubbing ? scrubPosition : playback.currentTime },
+                        set: { scrubPosition = $0 }
+                    ),
+                    in: 0 ... max(playback.duration, 1),
+                    onEditingChanged: { editing in
+                        isScrubbing = editing
+                        if !editing {
+                            playback.seek(to: scrubPosition)
+                        }
+                    }
+                )
+                .tint(AppTheme.accent)
+                .disabled(!playback.hasCurrentItem)
+
+                HStack {
+                    Text(formatTime(isScrubbing ? scrubPosition : playback.currentTime))
+                    Spacer()
+                    Text(formatTime(playback.duration))
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+
             HStack(spacing: 20) {
                 Button(playback.isPlaying ? "Pause" : "Play") {
                     if playback.isPlaying {
                         playback.pause()
+                    } else if playback.hasCurrentItem {
+                        playback.resume()
                     } else if let selected {
                         Task {
                             await play(selected)
@@ -120,6 +150,7 @@ struct PlayerView: View {
         .onAppear {
             playback.configureIfNeeded()
             playback.updateRate(Float(speed))
+            scrubPosition = playback.currentTime
         }
         .onChange(of: playback.isPlaying) { _, isPlaying in
             if isPlaying {
@@ -127,6 +158,14 @@ struct PlayerView: View {
             } else {
                 stopSpinning()
             }
+        }
+        .onChange(of: playback.currentTime) { _, newValue in
+            guard !isScrubbing else { return }
+            scrubPosition = newValue
+        }
+        .onChange(of: store.currentSampleID) { _, _ in
+            guard !isScrubbing else { return }
+            scrubPosition = playback.currentTime
         }
     }
 
@@ -166,5 +205,13 @@ struct PlayerView: View {
         withAnimation(.easeOut(duration: 0.85)) {
             rotation += 45
         }
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds > 0 else { return "0:00" }
+        let total = Int(seconds.rounded(.down))
+        let minutes = total / 60
+        let remainder = total % 60
+        return String(format: "%d:%02d", minutes, remainder)
     }
 }

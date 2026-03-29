@@ -3,122 +3,106 @@ import SwiftUI
 struct SampleFeedRow: View {
     let item: SampleItem
     let isActive: Bool
+    let isPlaying: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            SampleArtworkView(url: item.artworkURL, title: item.title)
-                .frame(width: 116, height: 116)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                UploaderAvatarView(
+                    imageURL: item.channelAvatarURL,
+                    fallbackText: item.uploaderName
+                )
+                .frame(width: 42, height: 42)
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(item.title)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(AppTheme.label)
-                            .lineLimit(2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.uploaderName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.label)
 
-                        HStack(spacing: 8) {
-                            Label {
-                                Text(item.publishedAt, style: .relative)
-                            } icon: {
-                                Image(systemName: "clock")
-                            }
-
-                            if let durationSeconds = item.durationSeconds {
-                                Label(formatDuration(durationSeconds), systemImage: "waveform")
-                            }
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    if isActive {
-                        Image(systemName: "speaker.wave.2.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(AppTheme.accent)
-                            .padding(8)
-                            .background(AppTheme.accent.opacity(0.14))
-                            .clipShape(Circle())
+                    if let subtitle = item.uploaderSubtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                uploaderBadge
+                Spacer(minLength: 0)
 
-                if !item.genreTags.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(Array(item.genreTags.prefix(3)), id: \.self) { tag in
-                                Text(tag.key.replacingOccurrences(of: "_", with: " ").uppercased())
-                                    .font(.caption2.weight(.semibold))
-                                    .tracking(0.5)
-                                    .foregroundStyle(AppTheme.label.opacity(0.78))
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 5)
-                                    .background(Capsule().fill(Color.white.opacity(0.06)))
-                            }
-                        }
-                    }
+                if item.isSaved {
+                    statusPill("Saved", systemImage: "bookmark.fill")
                 }
+
+                statusPill(
+                    isActive ? (isPlaying ? "Playing" : "Paused") : "Preview",
+                    systemImage: isActive && isPlaying ? "pause.fill" : "play.fill",
+                    isEmphasized: isActive
+                )
+            }
+
+            Text(item.title)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AppTheme.label)
+                .lineLimit(3)
+
+            SampleArtworkView(url: item.artworkURL)
+                .frame(maxWidth: .infinity)
+                .frame(height: item.artworkURL == nil ? 140 : 180)
+
+            HStack(spacing: 12) {
+                if let durationSeconds = item.durationSeconds {
+                    metaLabel(formatDuration(durationSeconds), systemImage: "waveform")
+                }
+
+                metaLabel(relativeTimestamp, systemImage: "clock")
+
+                if item.downloadState == .downloaded {
+                    metaLabel("Offline", systemImage: "arrow.down.circle.fill")
+                }
+
+                Spacer(minLength: 0)
             }
         }
-        .padding(14)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [AppTheme.panel, AppTheme.panel.opacity(0.92)],
+                        colors: [
+                            Color(red: 0.18, green: 0.18, blue: 0.17),
+                            Color(red: 0.14, green: 0.14, blue: 0.13),
+                        ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(isActive ? AppTheme.accent.opacity(0.65) : Color.white.opacity(0.05), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(isActive ? AppTheme.accent.opacity(0.7) : Color.white.opacity(0.05), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.2), radius: 12, x: 0, y: 8)
+        .shadow(color: .black.opacity(0.22), radius: 16, x: 0, y: 10)
     }
 
-    private var uploaderBadge: some View {
-        HStack(spacing: 10) {
-            UploaderAvatarView(
-                imageURL: item.channelAvatarURL,
-                fallbackText: item.uploaderName
+    private var relativeTimestamp: String {
+        item.publishedAt.formatted(.relative(presentation: .named))
+    }
+
+    private func metaLabel(_ text: String, systemImage: String) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(AppTheme.label.opacity(0.72))
+    }
+
+    private func statusPill(_ text: String, systemImage: String, isEmphasized: Bool = false) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isEmphasized ? Color.black.opacity(0.82) : AppTheme.label.opacity(0.82))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(isEmphasized ? AppTheme.accent : Color.white.opacity(0.07))
             )
-            .frame(width: 34, height: 34)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.uploaderName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.label)
-                    .lineLimit(1)
-
-                if let subtitle = item.uploaderSubtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            if item.isSaved {
-                Text("IN LIBRARY")
-                    .font(.caption2.weight(.bold))
-                    .tracking(0.7)
-                    .foregroundStyle(AppTheme.accent)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(AppTheme.accent.opacity(0.14))
-                    .clipShape(Capsule())
-            }
-        }
-        .padding(10)
-        .background(Color.white.opacity(0.035))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func formatDuration(_ durationSeconds: Int) -> String {
@@ -130,17 +114,16 @@ struct SampleFeedRow: View {
 
 struct SampleArtworkView: View {
     let url: URL?
-    let title: String
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            AppTheme.accent.opacity(0.35),
+                            AppTheme.accent.opacity(0.18),
                             AppTheme.panel,
-                            Color.black.opacity(0.85),
+                            Color.black.opacity(0.84),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -158,27 +141,15 @@ struct SampleArtworkView: View {
                 }
             } else {
                 Image(systemName: "waveform.circle.fill")
-                    .font(.system(size: 34))
+                    .font(.system(size: 40))
                     .foregroundStyle(AppTheme.label.opacity(0.88))
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: [.clear, Color.black.opacity(0.8)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .allowsHitTesting(false)
-        }
-        .overlay(alignment: .bottomLeading) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.92))
-                .lineLimit(2)
-                .padding(10)
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        )
     }
 }
 

@@ -51,7 +51,13 @@ resolver = PlaybackResolver(
 )
 
 DEFAULT_CHANNELS: list[Channel] = [
-    Channel(id="UCv5OAW45h67CJEY6kJLyisg", handle="@andrenavarroII", title="andrenavarroII", is_tracked=True),
+    Channel(
+        id="UCv5OAW45h67CJEY6kJLyisg",
+        handle="@andrenavarroII",
+        title="Andre Navarro II",
+        avatar_url="https://yt3.googleusercontent.com/COXNzFPEO8BSI7Xrx1rAaYZlrD22Ku0iNv9_wlurCxdE_g8rx5xm2N2kgB_KiyYsQNG9d4WY8z4=s900-c-k-c0x00ffffff-no-rj",
+        is_tracked=True,
+    ),
 ]
 channel_catalog = ChannelCatalog(
     api_key=settings.youtube_api_key,

@@ -103,7 +103,8 @@ def test_user_channels_default_to_global_defaults():
         {
             "id": "UCv5OAW45h67CJEY6kJLyisg",
             "handle": "@andrenavarroII",
-            "title": "andrenavarroII",
+            "title": "Andre Navarro II",
+            "avatar_url": "https://yt3.googleusercontent.com/COXNzFPEO8BSI7Xrx1rAaYZlrD22Ku0iNv9_wlurCxdE_g8rx5xm2N2kgB_KiyYsQNG9d4WY8z4=s900-c-k-c0x00ffffff-no-rj",
             "is_tracked": True,
         }
     ]
@@ -153,6 +154,40 @@ def test_user_channels_can_be_updated_per_device():
     get_other_device = client.get("/v1/users/device-channels-other/channels")
     assert get_other_device.status_code == 200
     assert get_other_device.json()[0]["id"] == "UCv5OAW45h67CJEY6kJLyisg"
+
+
+def test_samples_endpoint_preserves_stored_channel_metadata():
+    main_mod.store.upsert_samples(
+        [
+            SampleItem(
+                id="sample-metadata",
+                youtube_video_id="yt-metadata",
+                channel_id="channel-1",
+                channel_title="Channel One",
+                channel_handle="@channelone",
+                channel_avatar_url="https://example.com/channel.jpg",
+                title="Detailed sample",
+                description_text="desc",
+                published_at=datetime.now(timezone.utc),
+                artwork_url="https://example.com/thumb.jpg",
+                duration_seconds=91,
+                genre_tags=[],
+                tone_tags=[],
+                is_saved=False,
+                saved_at=None,
+                download_state="not_downloaded",
+                stream_state="idle",
+            )
+        ]
+    )
+
+    response = client.get("/v1/samples?limit=10&cursor=0")
+    assert response.status_code == 200
+    item = next(row for row in response.json()["items"] if row["id"] == "sample-metadata")
+    assert item["channel_title"] == "Channel One"
+    assert item["channel_handle"] == "@channelone"
+    assert item["channel_avatar_url"] == "https://example.com/channel.jpg"
+    assert item["duration_seconds"] == 91
 
 
 def test_poll_once_reports_inserted_and_notifications(monkeypatch):

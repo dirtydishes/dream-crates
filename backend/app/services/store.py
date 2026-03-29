@@ -1,8 +1,9 @@
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.models import Channel, SampleItem
+from app.models import Channel, SampleItem, TagScore
 
 
 class SampleStore:
@@ -24,10 +25,16 @@ class SampleStore:
                     id TEXT PRIMARY KEY,
                     youtube_video_id TEXT UNIQUE NOT NULL,
                     channel_id TEXT NOT NULL,
+                    channel_title TEXT,
+                    channel_handle TEXT,
+                    channel_avatar_url TEXT,
                     title TEXT NOT NULL,
                     description_text TEXT NOT NULL,
                     published_at TEXT NOT NULL,
                     artwork_url TEXT,
+                    duration_seconds INTEGER,
+                    genre_tags_json TEXT NOT NULL DEFAULT '[]',
+                    tone_tags_json TEXT NOT NULL DEFAULT '[]',
                     is_saved INTEGER NOT NULL DEFAULT 0,
                     saved_at TEXT,
                     download_state TEXT NOT NULL DEFAULT 'not_downloaded',
@@ -35,6 +42,12 @@ class SampleStore:
                 )
                 """
             )
+            self._ensure_column(conn, "samples", "channel_title", "TEXT")
+            self._ensure_column(conn, "samples", "channel_handle", "TEXT")
+            self._ensure_column(conn, "samples", "channel_avatar_url", "TEXT")
+            self._ensure_column(conn, "samples", "duration_seconds", "INTEGER")
+            self._ensure_column(conn, "samples", "genre_tags_json", "TEXT NOT NULL DEFAULT '[]'")
+            self._ensure_column(conn, "samples", "tone_tags_json", "TEXT NOT NULL DEFAULT '[]'")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS devices (
@@ -66,12 +79,19 @@ class SampleStore:
                     channel_id TEXT NOT NULL,
                     handle TEXT NOT NULL,
                     title TEXT NOT NULL,
+                    avatar_url TEXT,
                     is_tracked INTEGER NOT NULL DEFAULT 1,
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY (device_id, channel_id)
                 )
                 """
             )
+            self._ensure_column(conn, "device_channels", "avatar_url", "TEXT")
+
+    def _ensure_column(self, conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def existing_video_ids(self, channel_id: str) -> set[str]:
         with self._connect() as conn:
@@ -88,18 +108,26 @@ class SampleStore:
                 result = conn.execute(
                     """
                     INSERT OR IGNORE INTO samples (
-                        id, youtube_video_id, channel_id, title, description_text,
-                        published_at, artwork_url, is_saved, saved_at, download_state, stream_state
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        id, youtube_video_id, channel_id, channel_title, channel_handle,
+                        channel_avatar_url, title, description_text, published_at, artwork_url,
+                        duration_seconds, genre_tags_json, tone_tags_json, is_saved, saved_at,
+                        download_state, stream_state
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         sample.id,
                         sample.youtube_video_id,
                         sample.channel_id,
+                        sample.channel_title,
+                        sample.channel_handle,
+                        sample.channel_avatar_url,
                         sample.title,
                         sample.description_text,
                         sample.published_at.isoformat(),
                         sample.artwork_url,
+                        sample.duration_seconds,
+                        self._encode_tags(sample.genre_tags),
+                        self._encode_tags(sample.tone_tags),
                         int(sample.is_saved),
                         sample.saved_at.isoformat() if sample.saved_at else None,
                         sample.download_state,
@@ -108,6 +136,39 @@ class SampleStore:
                 )
                 if result.rowcount:
                     inserted += 1
+                    continue
+
+                conn.execute(
+                    """
+                    UPDATE samples
+                    SET channel_id = ?,
+                        channel_title = COALESCE(?, channel_title),
+                        channel_handle = COALESCE(?, channel_handle),
+                        channel_avatar_url = COALESCE(?, channel_avatar_url),
+                        title = ?,
+                        description_text = ?,
+                        published_at = ?,
+                        artwork_url = COALESCE(?, artwork_url),
+                        duration_seconds = COALESCE(?, duration_seconds),
+                        genre_tags_json = ?,
+                        tone_tags_json = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        sample.channel_id,
+                        sample.channel_title,
+                        sample.channel_handle,
+                        sample.channel_avatar_url,
+                        sample.title,
+                        sample.description_text,
+                        sample.published_at.isoformat(),
+                        sample.artwork_url,
+                        sample.duration_seconds,
+                        self._encode_tags(sample.genre_tags),
+                        self._encode_tags(sample.tone_tags),
+                        sample.id,
+                    ),
+                )
         return inserted
 
     def list_recent(
@@ -127,8 +188,10 @@ class SampleStore:
         with self._connect() as conn:
             rows = conn.execute(
                 f"""
-                SELECT id, youtube_video_id, channel_id, title, description_text,
-                       published_at, artwork_url, is_saved, saved_at,
+                SELECT id, youtube_video_id, channel_id, channel_title, channel_handle,
+                       channel_avatar_url, title, description_text, published_at,
+                       artwork_url, duration_seconds, genre_tags_json, tone_tags_json,
+                       is_saved, saved_at,
                        download_state, stream_state
                 FROM samples
                 {where_clause}
@@ -146,10 +209,16 @@ class SampleStore:
                     id=row["id"],
                     youtube_video_id=row["youtube_video_id"],
                     channel_id=row["channel_id"],
+                    channel_title=row["channel_title"],
+                    channel_handle=row["channel_handle"],
+                    channel_avatar_url=row["channel_avatar_url"],
                     title=row["title"],
                     description_text=row["description_text"],
                     published_at=datetime.fromisoformat(row["published_at"]),
                     artwork_url=row["artwork_url"],
+                    duration_seconds=row["duration_seconds"],
+                    genre_tags=self._decode_tags(row["genre_tags_json"]),
+                    tone_tags=self._decode_tags(row["tone_tags_json"]),
                     is_saved=bool(row["is_saved"]),
                     saved_at=datetime.fromisoformat(row["saved_at"]) if row["saved_at"] else None,
                     download_state=row["download_state"],
@@ -173,8 +242,10 @@ class SampleStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, youtube_video_id, channel_id, title, description_text,
-                       published_at, artwork_url, is_saved, saved_at,
+                SELECT id, youtube_video_id, channel_id, channel_title, channel_handle,
+                       channel_avatar_url, title, description_text, published_at,
+                       artwork_url, duration_seconds, genre_tags_json, tone_tags_json,
+                       is_saved, saved_at,
                        download_state, stream_state
                 FROM samples
                 WHERE id = ?
@@ -189,15 +260,30 @@ class SampleStore:
             id=row["id"],
             youtube_video_id=row["youtube_video_id"],
             channel_id=row["channel_id"],
+            channel_title=row["channel_title"],
+            channel_handle=row["channel_handle"],
+            channel_avatar_url=row["channel_avatar_url"],
             title=row["title"],
             description_text=row["description_text"],
             published_at=datetime.fromisoformat(row["published_at"]),
             artwork_url=row["artwork_url"],
+            duration_seconds=row["duration_seconds"],
+            genre_tags=self._decode_tags(row["genre_tags_json"]),
+            tone_tags=self._decode_tags(row["tone_tags_json"]),
             is_saved=bool(row["is_saved"]),
             saved_at=datetime.fromisoformat(row["saved_at"]) if row["saved_at"] else None,
             download_state=row["download_state"],
             stream_state=row["stream_state"],
         )
+
+    def _encode_tags(self, tags: list[TagScore]) -> str:
+        return json.dumps([tag.model_dump() for tag in tags])
+
+    def _decode_tags(self, raw: str | None) -> list[TagScore]:
+        if not raw:
+            return []
+        payload = json.loads(raw)
+        return [TagScore(**entry) for entry in payload]
 
     def register_device(
         self,
@@ -285,7 +371,7 @@ class SampleStore:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT channel_id, handle, title, is_tracked
+                SELECT channel_id, handle, title, avatar_url, is_tracked
                 FROM device_channels
                 WHERE device_id = ?
                 ORDER BY rowid ASC
@@ -299,6 +385,7 @@ class SampleStore:
                     id=channel.id,
                     handle=channel.handle,
                     title=channel.title,
+                    avatar_url=channel.avatar_url,
                     is_tracked=channel.is_tracked,
                 )
                 for channel in default_channels
@@ -309,6 +396,7 @@ class SampleStore:
                 id=row["channel_id"],
                 handle=row["handle"],
                 title=row["title"],
+                avatar_url=row["avatar_url"],
                 is_tracked=bool(row["is_tracked"]),
             )
             for row in rows
@@ -325,14 +413,15 @@ class SampleStore:
                 conn.execute(
                     """
                     INSERT INTO device_channels (
-                        device_id, channel_id, handle, title, is_tracked, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                        device_id, channel_id, handle, title, avatar_url, is_tracked, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_id,
                         channel.id,
                         channel.handle,
                         channel.title,
+                        channel.avatar_url,
                         int(channel.is_tracked),
                         updated_at,
                     ),

@@ -11,6 +11,7 @@ private final class FakeRepository: SampleRepository {
     var playbackURL = URL(string: "https://example.com/playback.mp3")!
     var downloadURL = URL(string: "https://example.com/download.mp3")!
     var shouldFailUpdates = false
+    var resolvePlaybackCalls = 0
 
     init(items: [SampleItem], savedLibrary: [SampleItem]? = nil) {
         self.items = items
@@ -38,6 +39,7 @@ private final class FakeRepository: SampleRepository {
 
     func resolvePlayback(sampleID: String) async throws -> URL {
         _ = sampleID
+        resolvePlaybackCalls += 1
         return playbackURL
     }
 
@@ -185,6 +187,19 @@ final class AppCoreTests: XCTestCase {
         let second = NotificationPreferencesStore(apiClient: client, userDefaults: defaults)
         XCTAssertFalse(second.notificationsEnabled)
         XCTAssertFalse(second.quietHoursEnabled)
+    }
+
+    @MainActor
+    func testResolvedPlaybackURLUsesSessionCache() async throws {
+        let sample = makeSample(id: "base", savedAt: nil)
+        let repository = FakeRepository(items: [sample])
+        let store = SampleLibraryStore(repository: repository, localStateStore: makeLocalStateStore())
+        await store.load()
+
+        _ = try await store.resolvedPlaybackURL(for: sample.id)
+        _ = try await store.resolvedPlaybackURL(for: sample.id)
+
+        XCTAssertEqual(repository.resolvePlaybackCalls, 1)
     }
 
     func testBackendFeedPayloadDecodesWithSnakeCaseFields() throws {

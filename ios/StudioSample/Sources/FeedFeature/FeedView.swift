@@ -8,47 +8,71 @@ struct FeedView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(store.samples) { item in
-                    Button {
-                        Task {
-                            await play(item)
-                        }
-                    } label: {
-                        SampleFeedRow(
-                            item: item,
-                            isActive: playback.isPlaying && store.currentSampleID == item.id
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .listRowInsets(.init(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(AppTheme.bg)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            ScrollView {
+                LazyVStack(spacing: 18) {
+                    ForEach(store.samples) { item in
                         Button {
                             Task {
-                                await store.download(sampleID: item.id)
+                                await play(item)
                             }
                         } label: {
-                            Label(downloadLabel(for: item.downloadState), systemImage: downloadIcon(for: item.downloadState))
+                            SampleFeedRow(
+                                item: item,
+                                isActive: store.currentSampleID == item.id,
+                                isPlaying: playback.isPlaying && store.currentSampleID == item.id
+                            )
                         }
-                        .tint(.blue)
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button {
+                                Task {
+                                    await store.download(sampleID: item.id)
+                                }
+                            } label: {
+                                Label(downloadLabel(for: item.downloadState), systemImage: downloadIcon(for: item.downloadState))
+                            }
 
-                        Button {
-                            Task {
-                                await store.toggleSaved(sampleID: item.id)
+                            Button {
+                                Task {
+                                    await store.toggleSaved(sampleID: item.id)
+                                }
+                            } label: {
+                                Label(item.isSaved ? "Remove from Library" : "Save to Library", systemImage: item.isSaved ? "bookmark.slash" : "bookmark.fill")
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 18)
+            }
+            .background(AppTheme.bg)
+            .navigationTitle("Fresh Samples")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let current = store.currentSample {
+                        Menu {
+                            Button {
+                                Task {
+                                    await store.download(sampleID: current.id)
+                                }
+                            } label: {
+                                Label(downloadLabel(for: current.downloadState), systemImage: downloadIcon(for: current.downloadState))
+                            }
+
+                            Button {
+                                Task {
+                                    await store.toggleSaved(sampleID: current.id)
+                                }
+                            } label: {
+                                Label(current.isSaved ? "Remove from Library" : "Save to Library", systemImage: current.isSaved ? "bookmark.slash" : "bookmark.fill")
                             }
                         } label: {
-                            Label(item.isSaved ? "Remove" : "Library", systemImage: item.isSaved ? "bookmark.slash" : "bookmark.fill")
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundStyle(AppTheme.label)
                         }
-                        .tint(item.isSaved ? .gray : Color(red: 0.20, green: 0.60, blue: 0.34))
                     }
                 }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(AppTheme.bg)
-            .navigationTitle("Fresh Samples")
             .overlay {
                 if store.isLoading {
                     ProgressView()
@@ -70,7 +94,14 @@ struct FeedView: View {
     }
 
     private func play(_ item: SampleItem) async {
+        let isCurrentSelection = store.currentSampleID == item.id
         store.select(item.id)
+
+        if isCurrentSelection, playback.hasCurrentItem {
+            playback.togglePlayback()
+            appShell.selectedTab = .player
+            return
+        }
 
         do {
             let sourceURL = try await store.resolvedPlaybackURL(for: item.id)

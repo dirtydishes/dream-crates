@@ -44,16 +44,24 @@ struct SampleItem: Identifiable, Hashable, Codable {
             return channelTitle
         }
         if let channelHandle, !channelHandle.isEmpty {
-            return channelHandle
+            return normalizedHandle(channelHandle).replacingOccurrences(of: "@", with: "")
         }
-        return channelId
+        return "YouTube Channel"
     }
 
     var uploaderSubtitle: String? {
-        guard let channelHandle, !channelHandle.isEmpty, channelHandle != uploaderName else {
+        guard let channelHandle, !channelHandle.isEmpty else {
             return nil
         }
-        return channelHandle
+        let handle = normalizedHandle(channelHandle)
+        guard handle.caseInsensitiveCompare(uploaderName) != .orderedSame else {
+            return nil
+        }
+        return handle
+    }
+
+    private func normalizedHandle(_ handle: String) -> String {
+        handle.hasPrefix("@") ? handle : "@\(handle)"
     }
 }
 
