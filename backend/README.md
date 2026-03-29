@@ -25,9 +25,23 @@ cd /Users/kell/dev/dream-crates/backend
 ./scripts/run-tests.sh
 ```
 
+## Docker
+
+Build and run the backend with `yt-dlp` and `ffmpeg` available:
+
+```bash
+cd /Users/kell/dev/dream-crates
+cp deploy/docker/dream-crates.env.example deploy/docker/dream-crates.env
+docker compose up --build -d
+```
+
+Docker deployment details live in `/Users/kell/dev/dream-crates/deploy/docker/README.md`.
+
 ## Key endpoints (v1 scaffold)
 - `GET /healthz`
 - `GET /v1/channels/defaults`
+- `GET /v1/users/{deviceId}/channels`
+- `PUT /v1/users/{deviceId}/channels`
 - `GET /v1/samples`
 - `POST /v1/poller/run-once`
 - `GET /v1/tags/taxonomy`
@@ -58,6 +72,12 @@ Resolution can use either:
 - `STUDIO_RESOLVER_TTL_SECONDS`: default expiry when the resolver does not provide one
 
 The command template supports `{video_id}`, `{sample_id}`, and `{mode}` placeholders.
+
+For the containerized deployment, `deploy/docker/dream-crates.env.example` wires this to:
+
+```bash
+python /app/scripts/resolve_media_url.py --video-id {video_id} --mode {mode}
+```
 
 ## Testing Policy
 Use `/Users/kell/dev/dream-crates/testing.md` for device-first testing guidance.

@@ -6,7 +6,7 @@
        (   ~  ~   ~   )(   ~   ~~   ~  )(   ~   ~   ~   )
         '-._________.-' '-.__________.-' '-.__________.-'
              \   \            /   /             /   /
-          .-~~~~~~~~~~~~~~~~~~~~~~~~ dream crates ~~~~~~~~~~~~~~~~-. 
+          .-~~~~~~~~~~~~~~~~~~~~~~~~ dream crates ~~~~~~~~~~~~~~~~-.
         .(     soft stacks of samples floating through the cloud    ).
           '-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~-'
 ```
@@ -18,6 +18,7 @@ The repo currently contains a working vertical slice:
 - A SwiftUI iOS app with `Feed`, `Player`, `Library`, and `Settings` tabs
 - A FastAPI backend with sample ingestion, tagging, library state, playback/download resolution, and notification preference endpoints
 - Debian deployment assets for a single-node server using `systemd` and `nginx`
+- Docker deployment assets for a containerized backend with `yt-dlp` and `ffmpeg`
 - Device-first testing scripts and lightweight local smoke checks
 
 ## Status at a glance
@@ -50,6 +51,8 @@ The repo currently contains a working vertical slice:
 - `ios/StudioSample`: SwiftUI iPhone app
 - `backend`: FastAPI service, SQLite store, ingestion, tagging, push, resolver logic, tests
 - `deploy/debian`: Debian deployment templates, env example, `systemd` units, `nginx` config
+- `deploy/docker`: Docker deployment templates and environment examples
+- `docker-compose.yml`: local or server container orchestration for API + poller
 - `scripts`: top-level environment and API smoke scripts
 - `testing.md`: device-first testing policy
 - `PLAN.md`: product plan, milestones, acceptance criteria, and risks
@@ -224,6 +227,14 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
+### Backend (Docker + yt-dlp)
+
+```bash
+cd /Users/kell/Cloud/dev/dream-crates
+cp deploy/docker/dream-crates.env.example deploy/docker/dream-crates.env
+docker compose up --build -d
+```
+
 Default local backend URL:
 
 ```text
@@ -231,7 +242,6 @@ http://127.0.0.1:8000
 ```
 
 Run backend tests:
-
 ```bash
 cd backend
 ./scripts/run-tests.sh
@@ -242,6 +252,12 @@ Run API smoke checks against a running backend:
 ```bash
 ./scripts/api-smoke.sh
 ```
+
+Container notes:
+
+- The Docker image includes `yt-dlp` and `ffmpeg`
+- `deploy/docker/dream-crates.env.example` prewires the resolver command to use `backend/scripts/resolve_media_url.py`
+- Detailed container deployment notes live in `deploy/docker/README.md`
 
 ### iOS quickstart
 
@@ -324,7 +340,21 @@ When APNs is not fully configured, the backend still records notification events
 
 ## Deployment
 
-The repo includes a Debian single-node deployment layout under `deploy/debian`.
+The repo includes both:
+
+- a Debian single-node deployment layout under `deploy/debian`
+- a Docker deployment path under `deploy/docker` plus `docker-compose.yml`
+
+### Docker quick start
+
+```bash
+cp deploy/docker/dream-crates.env.example deploy/docker/dream-crates.env
+docker compose up --build -d
+```
+
+The Docker image bundles `yt-dlp` and `ffmpeg` so playback and download resolution can happen inside the containerized backend.
+
+### Debian deployment
 
 ### Services included
 

@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException
 from app.config import settings
 from app.models import (
     Channel,
+    ChannelsUpdateRequest,
     DevicePreferencesResponse,
     DeviceRegistrationRequest,
     DownloadPrepareResponse,
@@ -59,6 +60,17 @@ async def healthz() -> dict[str, str]:
 @app.get("/v1/channels/defaults")
 async def channels_defaults() -> list[Channel]:
     return DEFAULT_CHANNELS
+
+
+@app.get("/v1/users/{device_id}/channels", response_model=list[Channel])
+async def get_user_channels(device_id: str):
+    return store.list_device_channels(device_id=device_id, default_channels=DEFAULT_CHANNELS)
+
+
+@app.put("/v1/users/{device_id}/channels", response_model=list[Channel])
+async def put_user_channels(device_id: str, body: ChannelsUpdateRequest):
+    store.replace_device_channels(device_id=device_id, channels=body.channels)
+    return store.list_device_channels(device_id=device_id, default_channels=DEFAULT_CHANNELS)
 
 
 @app.get("/v1/samples")

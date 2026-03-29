@@ -264,9 +264,10 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = BAA2A9C5AB4C970BB0D8C5E1 /* Build configuration list for PBXProject "dream crates" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -276,6 +277,7 @@
 			mainGroup = BF292CF1650418728E539DA5;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 9FA2EF5DFB10018CA68C88C5 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (

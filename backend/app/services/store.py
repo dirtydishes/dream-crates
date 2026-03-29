@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.models import SampleItem
+from app.models import Channel, SampleItem
 
 
 class SampleStore:
@@ -56,6 +56,19 @@ class SampleStore:
                     title TEXT NOT NULL,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS device_channels (
+                    device_id TEXT NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    handle TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    is_tracked INTEGER NOT NULL DEFAULT 1,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (device_id, channel_id)
                 )
                 """
             )
@@ -267,6 +280,63 @@ class SampleStore:
                 """,
                 (device_id,),
             ).fetchone()
+
+    def list_device_channels(self, *, device_id: str, default_channels: list[Channel]) -> list[Channel]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT channel_id, handle, title, is_tracked
+                FROM device_channels
+                WHERE device_id = ?
+                ORDER BY rowid ASC
+                """,
+                (device_id,),
+            ).fetchall()
+
+        if not rows:
+            return [
+                Channel(
+                    id=channel.id,
+                    handle=channel.handle,
+                    title=channel.title,
+                    is_tracked=channel.is_tracked,
+                )
+                for channel in default_channels
+            ]
+
+        return [
+            Channel(
+                id=row["channel_id"],
+                handle=row["handle"],
+                title=row["title"],
+                is_tracked=bool(row["is_tracked"]),
+            )
+            for row in rows
+        ]
+
+    def replace_device_channels(self, *, device_id: str, channels: list[Channel]) -> None:
+        updated_at = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM device_channels WHERE device_id = ?",
+                (device_id,),
+            )
+            for channel in channels:
+                conn.execute(
+                    """
+                    INSERT INTO device_channels (
+                        device_id, channel_id, handle, title, is_tracked, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        device_id,
+                        channel.id,
+                        channel.handle,
+                        channel.title,
+                        int(channel.is_tracked),
+                        updated_at,
+                    ),
+                )
 
     def record_notification_event(self, *, device_id: str, sample_id: str, title: str, status: str) -> None:
         with self._connect() as conn:
