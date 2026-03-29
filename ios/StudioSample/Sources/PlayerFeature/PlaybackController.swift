@@ -14,6 +14,7 @@ final class PlaybackController: ObservableObject {
     private var currentSourceURL: URL?
     private var timeObserverToken: Any?
     private var playbackEndedObserver: NSObjectProtocol?
+    private var itemStatusObserver: NSKeyValueObservation?
 
     deinit {
         if let timeObserverToken {
@@ -28,8 +29,14 @@ final class PlaybackController: ObservableObject {
         player.currentItem != nil
     }
 
+    var canResumeCurrentItem: Bool {
+        currentSourceURL != nil && hasCurrentItem && (isPlaying || currentTime > 0 || duration > 0)
+    }
+
     func configureIfNeeded() {
         guard !remoteConfigured else { return }
+        player.automaticallyWaitsToMinimizeStalling = true
+        player.actionAtItemEnd = .pause
         configureAudioSession()
         configureRemoteCommands()
         configureObservers()
@@ -39,7 +46,7 @@ final class PlaybackController: ObservableObject {
     func play(title: String, sourceURL: URL, rate: Float) {
         self.rate = rate
         currentTitle = title
-        if currentSourceURL == sourceURL, hasCurrentItem {
+        if currentSourceURL == sourceURL, canResumeCurrentItem {
             resume()
             return
         }
@@ -47,7 +54,10 @@ final class PlaybackController: ObservableObject {
         currentSourceURL = sourceURL
         currentTime = 0
         duration = 0
-        player.replaceCurrentItem(with: AVPlayerItem(url: sourceURL))
+        let item = AVPlayerItem(url: sourceURL)
+        item.preferredForwardBufferDuration = 5
+        observeStatus(for: item)
+        player.replaceCurrentItem(with: item)
         resume()
     }
 
@@ -62,7 +72,8 @@ final class PlaybackController: ObservableObject {
         if duration > 0, currentTime >= max(duration - 0.25, 0) {
             seek(to: 0)
         }
-        player.playImmediately(atRate: rate)
+        player.play()
+        player.rate = rate
         isPlaying = true
         updateNowPlaying(title: currentTitle)
     }
@@ -76,6 +87,17 @@ final class PlaybackController: ObservableObject {
         let target = max(0, min(seconds, duration.isFinite && duration > 0 ? duration : seconds))
         currentTime = target
         player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        updateNowPlaying(title: currentTitle)
+    }
+
+    func stopAndReset() {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        itemStatusObserver = nil
+        isPlaying = false
+        currentTime = 0
+        duration = 0
+        currentSourceURL = nil
         updateNowPlaying(title: currentTitle)
     }
 
@@ -126,6 +148,17 @@ final class PlaybackController: ObservableObject {
             }
             self.seek(to: positionEvent.positionTime)
             return .success
+        }
+    }
+
+    private func observeStatus(for item: AVPlayerItem) {
+        itemStatusObserver = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            guard let self else { return }
+            Task { @MainActor in
+                if observedItem.status == .failed {
+                    self.stopAndReset()
+                }
+            }
         }
     }
 

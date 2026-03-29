@@ -29,11 +29,11 @@ struct SampleFeedRow: View {
                 Spacer(minLength: 0)
 
                 if item.isSaved {
-                    statusPill("Saved", systemImage: "bookmark.fill")
+                    iconPill(systemImage: "bookmark.fill")
                 }
 
                 statusPill(
-                    isActive ? (isPlaying ? "Playing" : "Paused") : "Preview",
+                    isPlaying ? "Pause" : "Play",
                     systemImage: isActive && isPlaying ? "pause.fill" : "play.fill",
                     isEmphasized: isActive
                 )
@@ -96,12 +96,25 @@ struct SampleFeedRow: View {
     private func statusPill(_ text: String, systemImage: String, isEmphasized: Bool = false) -> some View {
         Label(text, systemImage: systemImage)
             .font(.caption.weight(.semibold))
+            .lineLimit(1)
             .foregroundStyle(isEmphasized ? Color.black.opacity(0.82) : AppTheme.label.opacity(0.82))
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(
                 Capsule()
                     .fill(isEmphasized ? AppTheme.accent : Color.white.opacity(0.07))
+            )
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func iconPill(systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppTheme.label.opacity(0.82))
+            .padding(9)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.07))
             )
     }
 

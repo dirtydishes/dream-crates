@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct FeedView: View {
-    @EnvironmentObject private var appShell: AppShellStore
     @EnvironmentObject private var playback: PlaybackController
     @EnvironmentObject private var playbackPreferences: PlaybackPreferencesStore
     @EnvironmentObject private var store: SampleLibraryStore
@@ -97,9 +96,8 @@ struct FeedView: View {
         let isCurrentSelection = store.currentSampleID == item.id
         store.select(item.id)
 
-        if isCurrentSelection, playback.hasCurrentItem {
+        if isCurrentSelection, playback.canResumeCurrentItem {
             playback.togglePlayback()
-            appShell.selectedTab = .player
             return
         }
 
@@ -111,9 +109,8 @@ struct FeedView: View {
                 sourceURL: sourceURL,
                 rate: Float(playbackPreferences.speed)
             )
-            appShell.selectedTab = .player
         } catch {
-            playback.pause()
+            playback.stopAndReset()
         }
     }
 

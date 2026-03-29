@@ -109,7 +109,7 @@ struct PlayerView: View {
                 Button(playback.isPlaying ? "Pause" : "Play") {
                     if playback.isPlaying {
                         playback.pause()
-                    } else if playback.hasCurrentItem {
+                    } else if playback.canResumeCurrentItem {
                         playback.resume()
                     } else if let selected {
                         Task {
@@ -181,7 +181,7 @@ struct PlayerView: View {
                 rate: Float(speed)
             )
         } catch {
-            playback.pause()
+            playback.stopAndReset()
         }
     }
 
