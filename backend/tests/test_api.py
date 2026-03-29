@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import app.main as main_mod
 from app.models import SampleItem
+from app.services.youtube_poller import BackfillResult
 
 app = main_mod.app
 client = TestClient(app)
@@ -187,3 +188,96 @@ def test_poll_once_reports_inserted_and_notifications(monkeypatch):
     payload = response.json()
     assert payload["inserted"] == 1
     assert payload["notificationsSent"] == 1
+
+
+def test_backfill_endpoint_uses_defaults_without_notifications(monkeypatch):
+    class FakePoller:
+        def __init__(self):
+            self.limit = None
+
+        async def backfill_all(self, channels, *, limit=333):
+            self.limit = limit
+            return BackfillResult(
+                inserted_items=[
+                    SampleItem(
+                        id="sample-abc",
+                        youtube_video_id="abc",
+                        channel_id="channel-1",
+                        title="Fresh sample",
+                        description_text="",
+                        published_at=datetime.now(timezone.utc),
+                        genre_tags=[],
+                        tone_tags=[],
+                        is_saved=False,
+                        saved_at=None,
+                        download_state="not_downloaded",
+                        stream_state="idle",
+                    )
+                ],
+                exhausted=False,
+                channels_processed=len(channels),
+            )
+
+    class FakeDispatcher:
+        def notify_new_samples(self, samples):
+            raise AssertionError("notifications should be suppressed by default")
+
+    fake_poller = FakePoller()
+    monkeypatch.setattr(main_mod, "poller", fake_poller)
+    monkeypatch.setattr(main_mod, "push_dispatcher", FakeDispatcher())
+
+    response = client.post("/v1/admin/poller/backfill")
+    assert response.status_code == 200
+    payload = response.json()
+    assert fake_poller.limit == 333
+    assert payload["inserted"] == 1
+    assert payload["notifications_sent"] == 0
+    assert payload["requested_limit"] == 333
+    assert payload["exhausted"] is False
+    assert payload["channels_processed"] == 1
+
+
+def test_backfill_endpoint_can_send_notifications(monkeypatch):
+    class FakePoller:
+        async def backfill_all(self, channels, *, limit=333):
+            _ = channels
+            _ = limit
+            return BackfillResult(
+                inserted_items=[
+                    SampleItem(
+                        id="sample-abc",
+                        youtube_video_id="abc",
+                        channel_id="channel-1",
+                        title="Fresh sample",
+                        description_text="",
+                        published_at=datetime.now(timezone.utc),
+                        genre_tags=[],
+                        tone_tags=[],
+                        is_saved=False,
+                        saved_at=None,
+                        download_state="not_downloaded",
+                        stream_state="idle",
+                    )
+                ],
+                exhausted=True,
+                channels_processed=1,
+            )
+
+    class FakeDispatcher:
+        def notify_new_samples(self, samples):
+            return len(samples)
+
+    monkeypatch.setattr(main_mod, "poller", FakePoller())
+    monkeypatch.setattr(main_mod, "push_dispatcher", FakeDispatcher())
+
+    response = client.post(
+        "/v1/admin/poller/backfill",
+        json={"limit": 2, "send_notifications": True},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["inserted"] == 1
+    assert payload["notifications_sent"] == 1
+    assert payload["requested_limit"] == 2
+    assert payload["exhausted"] is True
+    assert payload["channels_processed"] == 1

@@ -53,6 +53,19 @@ class DownloadPrepareResponse(BaseModel):
     source: str
 
 
+class BackfillRequest(BaseModel):
+    limit: int = Field(default=333, ge=1)
+    send_notifications: bool = False
+
+
+class BackfillResponse(BaseModel):
+    inserted: int
+    notifications_sent: int
+    requested_limit: int
+    exhausted: bool
+    channels_processed: int
+
+
 class DeviceRegistrationRequest(BaseModel):
     device_id: str
     apns_token: str = ""
