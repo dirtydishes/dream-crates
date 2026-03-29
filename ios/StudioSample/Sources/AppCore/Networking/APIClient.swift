@@ -20,13 +20,35 @@ struct APIClient {
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
         applyDefaultHeaders(to: &request)
+        print("DreamCrates API fetchFeed -> \(url.absoluteString)")
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw APIError.badStatusCode
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            let bodyPreview = String(data: data.prefix(400), encoding: .utf8)
+            print("DreamCrates API fetchFeed bad status \(http.statusCode) for \(url.absoluteString)")
+            if let bodyPreview, !bodyPreview.isEmpty {
+                print("DreamCrates API fetchFeed body: \(bodyPreview)")
+            }
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: bodyPreview
+            )
         }
 
-        return try Self.makeDecoder().decode(FeedResponse.self, from: data)
+        do {
+            let response = try Self.makeDecoder().decode(FeedResponse.self, from: data)
+            print("DreamCrates API fetchFeed decoded \(response.items.count) items from \(url.absoluteString)")
+            return response
+        } catch {
+            let bodyPreview = String(data: data.prefix(400), encoding: .utf8) ?? "<non-utf8>"
+            print("DreamCrates API fetchFeed decode failed for \(url.absoluteString): \(error)")
+            print("DreamCrates API fetchFeed raw body: \(bodyPreview)")
+            throw APIError.decodingFailed(url: url.absoluteString, underlying: String(describing: error))
+        }
     }
 
     func runPollerOnce() async throws -> PollOnceResponse {
@@ -37,8 +59,15 @@ struct APIClient {
         applyDefaultHeaders(to: &request)
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw APIError.badStatusCode
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
         }
 
         return try Self.makeDecoder().decode(PollOnceResponse.self, from: data)
@@ -51,8 +80,15 @@ struct APIClient {
         applyDefaultHeaders(to: &request)
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw APIError.badStatusCode
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
         }
 
         return try Self.makeDecoder().decode([SampleItem].self, from: data)
@@ -73,10 +109,17 @@ struct APIClient {
         request.httpMethod = "PUT"
         request.timeoutInterval = 12
         applyDefaultHeaders(to: &request)
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw APIError.badStatusCode
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
         }
     }
 
@@ -102,9 +145,16 @@ struct APIClient {
             )
         )
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw APIError.badStatusCode
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
         }
     }
 
@@ -115,8 +165,15 @@ struct APIClient {
         applyDefaultHeaders(to: &request)
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw APIError.badStatusCode
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
         }
 
         return try Self.makeDecoder().decode(DevicePreferencesPayload.self, from: data)
@@ -141,9 +198,16 @@ struct APIClient {
             )
         )
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw APIError.badStatusCode
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.badStatusCode(url: url.absoluteString, statusCode: nil, bodyPreview: nil)
+        }
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw APIError.badStatusCode(
+                url: url.absoluteString,
+                statusCode: http.statusCode,
+                bodyPreview: String(data: data.prefix(400), encoding: .utf8)
+            )
         }
     }
 
@@ -155,14 +219,14 @@ struct APIClient {
     static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
     }
 }
 
 enum APIError: Error {
     case invalidURL
-    case badStatusCode
+    case badStatusCode(url: String, statusCode: Int?, bodyPreview: String?)
+    case decodingFailed(url: String, underlying: String)
 }
 
 struct FeedResponse: Codable {

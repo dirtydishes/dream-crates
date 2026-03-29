@@ -18,8 +18,10 @@ private struct RootTabView: View {
     @StateObject private var notificationPreferences: NotificationPreferencesStore
 
     init() {
+        let apiBaseURL = AppConfiguration.apiBaseURL
+        print("DreamCrates App configured API base URL -> \(apiBaseURL.absoluteString)")
         let client = APIClient(
-            baseURL: AppConfiguration.apiBaseURL,
+            baseURL: apiBaseURL,
             deviceID: DeviceIdentity.current()
         )
         _store = StateObject(
