@@ -48,6 +48,7 @@ final class SampleLibraryStore: ObservableObject {
                 currentSampleID = samples.first?.id
             }
         } catch {
+            print("DreamCrates SampleLibraryStore load failed: \(error)")
             samples = []
         }
     }
@@ -63,6 +64,7 @@ final class SampleLibraryStore: ObservableObject {
                 currentSampleID = samples.first?.id
             }
         } catch {
+            print("DreamCrates SampleLibraryStore refresh failed: \(error)")
             // Keep current snapshot on refresh errors.
         }
     }
