@@ -50,7 +50,7 @@ resolver = PlaybackResolver(
 )
 
 DEFAULT_CHANNELS: list[Channel] = [
-    Channel(id="UCs_1dV9bN0wQhQ_a9W8wO4Q", handle="@andrenavarroII", title="andrenavarroII", is_tracked=True),
+    Channel(id="UCv5OAW45h67CJEY6kJLyisg", handle="@andrenavarroII", title="andrenavarroII", is_tracked=True),
 ]
 
 

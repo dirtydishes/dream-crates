@@ -101,7 +101,7 @@ def test_user_channels_default_to_global_defaults():
     payload = response.json()
     assert payload == [
         {
-            "id": "UCs_1dV9bN0wQhQ_a9W8wO4Q",
+            "id": "UCv5OAW45h67CJEY6kJLyisg",
             "handle": "@andrenavarroII",
             "title": "andrenavarroII",
             "is_tracked": True,
@@ -152,7 +152,7 @@ def test_user_channels_can_be_updated_per_device():
 
     get_other_device = client.get("/v1/users/device-channels-other/channels")
     assert get_other_device.status_code == 200
-    assert get_other_device.json()[0]["id"] == "UCs_1dV9bN0wQhQ_a9W8wO4Q"
+    assert get_other_device.json()[0]["id"] == "UCv5OAW45h67CJEY6kJLyisg"
 
 
 def test_poll_once_reports_inserted_and_notifications(monkeypatch):
