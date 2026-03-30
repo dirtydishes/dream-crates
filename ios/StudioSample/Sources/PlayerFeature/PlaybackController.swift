@@ -112,7 +112,7 @@ final class PlaybackController: ObservableObject {
     private func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.allowAirPlay, .allowBluetoothHFP])
+            try session.setCategory(.playback, mode: .default, options: [.allowAirPlay, .allowBluetooth])
             try session.setActive(true)
         } catch {
             // Keep player functional even if background session setup fails.
