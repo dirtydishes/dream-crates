@@ -18,6 +18,7 @@ from app.models import (
 )
 from app.services.device_notifications import DeviceNotificationService
 from app.services.apns import APNSClient
+from app.services.channel_catalog import ChannelCatalog
 from app.services.push import PushDispatcher
 from app.services.resolver import PlaybackResolver
 from app.services.store import SampleStore
@@ -50,8 +51,19 @@ resolver = PlaybackResolver(
 )
 
 DEFAULT_CHANNELS: list[Channel] = [
-    Channel(id="UCv5OAW45h67CJEY6kJLyisg", handle="@andrenavarroII", title="andrenavarroII", is_tracked=True),
+    Channel(
+        id="UCv5OAW45h67CJEY6kJLyisg",
+        handle="@andrenavarroII",
+        title="Andre Navarro II",
+        avatar_url="https://yt3.googleusercontent.com/COXNzFPEO8BSI7Xrx1rAaYZlrD22Ku0iNv9_wlurCxdE_g8rx5xm2N2kgB_KiyYsQNG9d4WY8z4=s900-c-k-c0x00ffffff-no-rj",
+        is_tracked=True,
+    ),
 ]
+channel_catalog = ChannelCatalog(
+    api_key=settings.youtube_api_key,
+    base_url=settings.youtube_base_url,
+    defaults=DEFAULT_CHANNELS,
+)
 
 
 @app.get("/healthz")
@@ -59,17 +71,17 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/v1/channels/defaults")
+@app.get("/v1/channels/defaults", response_model=list[Channel], response_model_exclude_none=True)
 async def channels_defaults() -> list[Channel]:
-    return DEFAULT_CHANNELS
+    return await channel_catalog.default_channels()
 
 
-@app.get("/v1/users/{device_id}/channels", response_model=list[Channel])
+@app.get("/v1/users/{device_id}/channels", response_model=list[Channel], response_model_exclude_none=True)
 async def get_user_channels(device_id: str):
     return store.list_device_channels(device_id=device_id, default_channels=DEFAULT_CHANNELS)
 
 
-@app.put("/v1/users/{device_id}/channels", response_model=list[Channel])
+@app.put("/v1/users/{device_id}/channels", response_model=list[Channel], response_model_exclude_none=True)
 async def put_user_channels(device_id: str, body: ChannelsUpdateRequest):
     store.replace_device_channels(device_id=device_id, channels=body.channels)
     return store.list_device_channels(device_id=device_id, default_channels=DEFAULT_CHANNELS)
@@ -81,6 +93,11 @@ async def samples(limit: int = 50, cursor: int = 0, since: str | None = None):
     safe_cursor = max(0, cursor)
     since_value = datetime.fromisoformat(since) if since else None
     items = store.list_recent(limit=safe_limit, offset=safe_cursor, since=since_value)
+    if safe_cursor == 0 and len(items) <= 1:
+        result = await poller.backfill_all(DEFAULT_CHANNELS, limit=max(333, safe_limit))
+        if result.inserted_items:
+            items = store.list_recent(limit=safe_limit, offset=safe_cursor, since=since_value)
+    items = await channel_catalog.decorate_samples(items)
     next_cursor = safe_cursor + len(items) if len(items) == safe_limit else None
     return {"items": items, "nextCursor": next_cursor}
 
@@ -116,7 +133,8 @@ async def tags_taxonomy() -> dict[str, list[str]]:
 @app.get("/v1/users/{device_id}/library")
 async def get_library(device_id: str, limit: int = 50):
     _ = device_id
-    return [sample for sample in store.list_recent(limit=limit, offset=0) if sample.is_saved]
+    saved = [sample for sample in store.list_recent(limit=limit, offset=0) if sample.is_saved]
+    return await channel_catalog.decorate_samples(saved)
 
 
 @app.put("/v1/users/{device_id}/library/{sample_id}")

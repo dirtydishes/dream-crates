@@ -6,6 +6,7 @@ class Channel(BaseModel):
     id: str
     handle: str
     title: str
+    avatar_url: str | None = None
     is_tracked: bool = True
 
 
@@ -18,6 +19,9 @@ class SampleItem(BaseModel):
     id: str
     youtube_video_id: str
     channel_id: str
+    channel_title: str | None = None
+    channel_handle: str | None = None
+    channel_avatar_url: str | None = None
     title: str
     description_text: str
     published_at: datetime

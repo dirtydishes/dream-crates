@@ -4,6 +4,9 @@ struct SampleItem: Identifiable, Hashable, Codable {
     let id: String
     let youtubeVideoId: String
     let channelId: String
+    let channelTitle: String?
+    let channelHandle: String?
+    let channelAvatarURL: URL?
     let title: String
     let descriptionText: String
     let publishedAt: Date
@@ -20,6 +23,9 @@ struct SampleItem: Identifiable, Hashable, Codable {
         case id
         case youtubeVideoId = "youtube_video_id"
         case channelId = "channel_id"
+        case channelTitle = "channel_title"
+        case channelHandle = "channel_handle"
+        case channelAvatarURL = "channel_avatar_url"
         case title
         case descriptionText = "description_text"
         case publishedAt = "published_at"
@@ -31,6 +37,31 @@ struct SampleItem: Identifiable, Hashable, Codable {
         case savedAt = "saved_at"
         case downloadState = "download_state"
         case streamState = "stream_state"
+    }
+
+    var uploaderName: String {
+        if let channelTitle, !channelTitle.isEmpty {
+            return channelTitle
+        }
+        if let channelHandle, !channelHandle.isEmpty {
+            return normalizedHandle(channelHandle).replacingOccurrences(of: "@", with: "")
+        }
+        return "YouTube Channel"
+    }
+
+    var uploaderSubtitle: String? {
+        guard let channelHandle, !channelHandle.isEmpty else {
+            return nil
+        }
+        let handle = normalizedHandle(channelHandle)
+        guard handle.caseInsensitiveCompare(uploaderName) != .orderedSame else {
+            return nil
+        }
+        return handle
+    }
+
+    private func normalizedHandle(_ handle: String) -> String {
+        handle.hasPrefix("@") ? handle : "@\(handle)"
     }
 }
 

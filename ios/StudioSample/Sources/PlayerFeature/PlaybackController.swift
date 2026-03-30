@@ -5,30 +5,100 @@ import MediaPlayer
 final class PlaybackController: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var rate: Float = 1.0
+    @Published private(set) var currentTime: Double = 0
+    @Published private(set) var duration: Double = 0
 
     private let player = AVPlayer()
     private var remoteConfigured = false
+    private var currentTitle = "Dream Crates"
+    private var currentSourceURL: URL?
+    private var timeObserverToken: Any?
+    private var playbackEndedObserver: NSObjectProtocol?
+    private var itemStatusObserver: NSKeyValueObservation?
+
+    deinit {
+        if let timeObserverToken {
+            player.removeTimeObserver(timeObserverToken)
+        }
+        if let playbackEndedObserver {
+            NotificationCenter.default.removeObserver(playbackEndedObserver)
+        }
+    }
+
+    var hasCurrentItem: Bool {
+        player.currentItem != nil
+    }
+
+    var canResumeCurrentItem: Bool {
+        currentSourceURL != nil && hasCurrentItem && (isPlaying || currentTime > 0 || duration > 0)
+    }
 
     func configureIfNeeded() {
         guard !remoteConfigured else { return }
+        player.automaticallyWaitsToMinimizeStalling = true
+        player.actionAtItemEnd = .pause
         configureAudioSession()
         configureRemoteCommands()
+        configureObservers()
         remoteConfigured = true
     }
 
     func play(title: String, sourceURL: URL, rate: Float) {
         self.rate = rate
+        currentTitle = title
+        if currentSourceURL == sourceURL, canResumeCurrentItem {
+            resume()
+            return
+        }
 
-        player.replaceCurrentItem(with: AVPlayerItem(url: sourceURL))
-
-        player.playImmediately(atRate: rate)
-        isPlaying = true
-        updateNowPlaying(title: title)
+        currentSourceURL = sourceURL
+        currentTime = 0
+        duration = 0
+        let item = AVPlayerItem(url: sourceURL)
+        item.preferredForwardBufferDuration = 5
+        observeStatus(for: item)
+        player.replaceCurrentItem(with: item)
+        resume()
     }
 
     func pause() {
         player.pause()
         isPlaying = false
+        updateNowPlaying(title: currentTitle)
+    }
+
+    func resume() {
+        guard hasCurrentItem else { return }
+        if duration > 0, currentTime >= max(duration - 0.25, 0) {
+            seek(to: 0)
+        }
+        player.play()
+        player.rate = rate
+        isPlaying = true
+        updateNowPlaying(title: currentTitle)
+    }
+
+    func togglePlayback() {
+        isPlaying ? pause() : resume()
+    }
+
+    func seek(to seconds: Double) {
+        guard hasCurrentItem else { return }
+        let target = max(0, min(seconds, duration.isFinite && duration > 0 ? duration : seconds))
+        currentTime = target
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        updateNowPlaying(title: currentTitle)
+    }
+
+    func stopAndReset() {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        itemStatusObserver = nil
+        isPlaying = false
+        currentTime = 0
+        duration = 0
+        currentSourceURL = nil
+        updateNowPlaying(title: currentTitle)
     }
 
     func updateRate(_ value: Float) {
@@ -36,13 +106,13 @@ final class PlaybackController: ObservableObject {
         if isPlaying {
             player.rate = value
         }
-        updateNowPlaying(title: MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyTitle] as? String)
+        updateNowPlaying(title: currentTitle)
     }
 
     private func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.allowAirPlay, .allowBluetoothHFP])
+            try session.setCategory(.playback, mode: .default, options: [.allowAirPlay, .allowBluetooth])
             try session.setActive(true)
         } catch {
             // Keep player functional even if background session setup fails.
@@ -54,10 +124,7 @@ final class PlaybackController: ObservableObject {
 
         commandCenter.playCommand.addTarget { [weak self] _ in
             guard let self else { return .commandFailed }
-            guard let sourceURL = URL(string: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3") else {
-                return .commandFailed
-            }
-            self.play(title: "Dream Crates", sourceURL: sourceURL, rate: self.rate)
+            self.resume()
             return .success
         }
 
@@ -74,12 +141,64 @@ final class PlaybackController: ObservableObject {
             self.updateRate(rateEvent.playbackRate)
             return .success
         }
+
+        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self, let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            self.seek(to: positionEvent.positionTime)
+            return .success
+        }
+    }
+
+    private func observeStatus(for item: AVPlayerItem) {
+        itemStatusObserver = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            guard let self else { return }
+            Task { @MainActor in
+                if observedItem.status == .failed {
+                    self.stopAndReset()
+                }
+            }
+        }
+    }
+
+    private func configureObservers() {
+        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
+        timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self else { return }
+            Task { @MainActor in
+                self.currentTime = time.seconds.isFinite ? time.seconds : 0
+                if let itemDuration = self.player.currentItem?.duration.seconds, itemDuration.isFinite {
+                    self.duration = itemDuration
+                }
+                self.updateNowPlaying(title: self.currentTitle)
+            }
+        }
+
+        playbackEndedObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            Task { @MainActor in
+                guard notification.object as? AVPlayerItem === self.player.currentItem else { return }
+                self.isPlaying = false
+                self.currentTime = self.duration
+                self.updateNowPlaying(title: self.currentTitle)
+            }
+        }
     }
 
     private func updateNowPlaying(title: String?) {
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: title ?? "Dream Crates",
-            MPNowPlayingInfoPropertyPlaybackRate: rate,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? rate : 0,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
         ]
+        if duration > 0, duration.isFinite {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 }
