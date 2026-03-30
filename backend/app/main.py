@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 
 from fastapi import Body, FastAPI, HTTPException
 
@@ -24,6 +25,8 @@ from app.services.resolver import PlaybackResolver
 from app.services.store import SampleStore
 from app.services.tagging import RulesTagger
 from app.services.youtube_poller import YouTubePoller
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="StudioSample Backend", version="0.1.0")
 store = SampleStore(settings.storage_path)
@@ -94,9 +97,12 @@ async def samples(limit: int = 50, cursor: int = 0, since: str | None = None):
     since_value = datetime.fromisoformat(since) if since else None
     items = store.list_recent(limit=safe_limit, offset=safe_cursor, since=since_value)
     if safe_cursor == 0 and len(items) <= 1:
-        result = await poller.backfill_all(DEFAULT_CHANNELS, limit=max(333, safe_limit))
-        if result.inserted_items:
-            items = store.list_recent(limit=safe_limit, offset=safe_cursor, since=since_value)
+        try:
+            result = await poller.backfill_all(DEFAULT_CHANNELS, limit=max(333, safe_limit))
+            if result.inserted_items:
+                items = store.list_recent(limit=safe_limit, offset=safe_cursor, since=since_value)
+        except Exception:
+            logger.exception("Auto-backfill failed while serving /v1/samples")
     items = await channel_catalog.decorate_samples(items)
     next_cursor = safe_cursor + len(items) if len(items) == safe_limit else None
     return {"items": items, "nextCursor": next_cursor}

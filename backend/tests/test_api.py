@@ -234,6 +234,43 @@ def test_samples_endpoint_backfills_when_feed_is_sparse(monkeypatch):
     assert any(item["id"] == "sample-backfilled" for item in response.json()["items"])
 
 
+def test_samples_endpoint_survives_auto_backfill_failure(monkeypatch):
+    existing_sample = SampleItem(
+        id="sample-existing",
+        youtube_video_id="yt-existing",
+        channel_id="channel-1",
+        title="Existing sample",
+        description_text="desc",
+        published_at=datetime.now(timezone.utc),
+        genre_tags=[],
+        tone_tags=[],
+        is_saved=False,
+        saved_at=None,
+        download_state="not_downloaded",
+        stream_state="idle",
+    )
+
+    class FakeStore:
+        def list_recent(self, limit=50, offset=0, since=None):
+            _ = limit
+            _ = offset
+            _ = since
+            return [existing_sample]
+
+    class FailingPoller:
+        async def backfill_all(self, channels, *, limit=333):
+            _ = channels
+            _ = limit
+            raise RuntimeError("youtube api unavailable")
+
+    monkeypatch.setattr(main_mod, "store", FakeStore())
+    monkeypatch.setattr(main_mod, "poller", FailingPoller())
+
+    response = client.get("/v1/samples?limit=10&cursor=0")
+    assert response.status_code == 200
+    assert response.json()["items"][0]["id"] == "sample-existing"
+
+
 def test_channel_catalog_parses_profile_metadata_from_html():
     html = """
     <script>
