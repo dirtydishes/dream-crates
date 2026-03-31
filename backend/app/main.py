@@ -161,7 +161,7 @@ async def resolve_playback(request: Request, body: PlaybackResolveRequest):
 
     return PlaybackResolveResponse(
         sample_id=body.sample_id,
-        playback_url=str(request.url_for("media_proxy", sample_id=body.sample_id, mode="stream")),
+        playback_url=_public_url_for(request, "media_proxy", sample_id=body.sample_id, mode="stream"),
         expires_at=datetime.now(timezone.utc) + timedelta(seconds=settings.resolver_ttl_seconds),
         source="backend-proxy",
     )
@@ -175,7 +175,7 @@ async def prepare_download(request: Request, body: DownloadPrepareRequest):
 
     return DownloadPrepareResponse(
         sample_id=body.sample_id,
-        download_url=str(request.url_for("media_proxy", sample_id=body.sample_id, mode="download")),
+        download_url=_public_url_for(request, "media_proxy", sample_id=body.sample_id, mode="download"),
         expires_at=datetime.now(timezone.utc) + timedelta(seconds=settings.resolver_ttl_seconds),
         source="backend-proxy",
     )
@@ -283,3 +283,14 @@ def _filter_proxy_headers(headers: httpx.Headers) -> dict[str, str]:
         for key, value in headers.items()
         if key.lower() not in hop_by_hop
     }
+
+
+def _public_url_for(request: Request, route_name: str, **path_params: str) -> str:
+    url = request.url_for(route_name, **path_params)
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if host:
+        url = url.replace(scheme=scheme, netloc=host)
+    elif scheme != url.scheme:
+        url = url.replace(scheme=scheme)
+    return str(url)
