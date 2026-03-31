@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import StudioSampleApp
 
@@ -7,6 +8,7 @@ private final class FakePlaybackEngine: PlaybackEngine {
         let sourceURL: URL
         let startTime: Double
         let settings: PlaybackSettings
+        let expectedDuration: Double?
         let autoplay: Bool
     }
 
@@ -25,7 +27,13 @@ private final class FakePlaybackEngine: PlaybackEngine {
     private(set) var stopCallCount = 0
     private(set) var updateCalls: [PlaybackSettings] = []
 
-    func load(sourceURL: URL, startTime: Double, settings: PlaybackSettings, autoplay: Bool) throws {
+    func load(
+        sourceURL: URL,
+        startTime: Double,
+        settings: PlaybackSettings,
+        expectedDuration: Double?,
+        autoplay: Bool
+    ) throws {
         currentURL = sourceURL
         currentTime = startTime
         hasItem = true
@@ -35,6 +43,7 @@ private final class FakePlaybackEngine: PlaybackEngine {
                 sourceURL: sourceURL,
                 startTime: startTime,
                 settings: settings,
+                expectedDuration: expectedDuration,
                 autoplay: autoplay
             )
         )
@@ -489,6 +498,130 @@ final class AppCoreTests: XCTestCase {
         XCTAssertEqual(warp.loadCalls.count, 1)
         XCTAssertEqual(warp.loadCalls.last?.startTime, 18.5)
         XCTAssertEqual(warp.loadCalls.last?.settings.transposeSemitones, -3)
+    }
+
+    @MainActor
+    func testControllerPassesExpectedDurationToTurntableEngine() {
+        let turntable = FakePlaybackEngine()
+        let warp = FakePlaybackEngine()
+        let controller = PlaybackController(turntableEngine: turntable, warpEngine: warp)
+        let sourceURL = URL(string: "https://example.com/sample.mp3")!
+
+        controller.play(
+            title: "Sample",
+            sourceURL: sourceURL,
+            settings: PlaybackSettings(mode: .turntable, speed: 2.0),
+            expectedDuration: 280
+        )
+
+        XCTAssertEqual(turntable.loadCalls.last?.expectedDuration, 280)
+        XCTAssertEqual(warp.loadCalls.count, 0)
+    }
+
+    func testPlaybackTimelineScalesDisplayTimeWithSpeed() {
+        let timeline = PlaybackTimeline(speed: 2.0)
+
+        XCTAssertEqual(timeline.displayDuration(fromSourceDuration: 120), 60, accuracy: 0.001)
+        XCTAssertEqual(timeline.displayTime(fromSourceTime: 30), 15, accuracy: 0.001)
+        XCTAssertEqual(timeline.sourceTime(fromDisplayTime: 15), 30, accuracy: 0.001)
+    }
+
+    func testPlaybackTimelineUsesPlayerSampleRateForWarpProgress() {
+        let sourceTime = PlaybackTimeline.sourceTime(
+            scheduledStartTime: 12,
+            playerSampleTime: AVAudioFramePosition(88_200),
+            playerSampleRate: 44_100
+        )
+
+        XCTAssertEqual(sourceTime, 14, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testTurntableEnginePrefersExpectedDurationWhenStreamMetadataIsWrong() throws {
+        let root = makePlaybackRoot()
+        let fileURL = root.appendingPathComponent("Fixtures/turntable-expected.wav")
+        try writeAudioFixture(to: fileURL, durationSeconds: 8)
+
+        let engine = TurntablePlaybackEngine()
+        try engine.load(
+            sourceURL: fileURL,
+            startTime: 0,
+            settings: PlaybackSettings(mode: .turntable, speed: 2.0),
+            expectedDuration: 4,
+            autoplay: false
+        )
+
+        XCTAssertEqual(engine.duration, 2.0, accuracy: 0.05)
+    }
+
+    @MainActor
+    func testWarpEngineDurationAndSeekFollowPlaybackSpeed() throws {
+        let root = makePlaybackRoot()
+        let fileURL = root.appendingPathComponent("Fixtures/test.wav")
+        try writeAudioFixture(to: fileURL, durationSeconds: 4)
+
+        let engine = WarpPlaybackEngine()
+        try engine.load(
+            sourceURL: fileURL,
+            startTime: 0,
+            settings: PlaybackSettings(mode: .warp, speed: 2.0, transposeSemitones: 5),
+            expectedDuration: nil,
+            autoplay: false
+        )
+
+        XCTAssertEqual(engine.duration, 2.0, accuracy: 0.05)
+
+        engine.seek(to: 1.25)
+
+        XCTAssertEqual(engine.currentTime, 1.25, accuracy: 0.05)
+    }
+
+    @MainActor
+    func testWarpEngineCurrentTimeAdvancesWhilePlaying() throws {
+        let root = makePlaybackRoot()
+        let fileURL = root.appendingPathComponent("Fixtures/progress.wav")
+        try writeAudioFixture(to: fileURL, durationSeconds: 4)
+
+        let engine = WarpPlaybackEngine()
+        try engine.load(
+            sourceURL: fileURL,
+            startTime: 0,
+            settings: PlaybackSettings(mode: .warp, speed: 1.0, transposeSemitones: 0),
+            expectedDuration: nil,
+            autoplay: true
+        )
+
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.45))
+
+        XCTAssertGreaterThan(engine.currentTime, 0.15)
+    }
+
+    @MainActor
+    func testWarpEngineCanSeekNearEndThenBackToBeginning() throws {
+        let root = makePlaybackRoot()
+        let fileURL = root.appendingPathComponent("Fixtures/seek.wav")
+        try writeAudioFixture(to: fileURL, durationSeconds: 6)
+
+        let engine = WarpPlaybackEngine()
+        try engine.load(
+            sourceURL: fileURL,
+            startTime: 0,
+            settings: PlaybackSettings(mode: .warp, speed: 1.0, transposeSemitones: 0),
+            expectedDuration: nil,
+            autoplay: true
+        )
+
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+        engine.seek(to: 5.2)
+        XCTAssertEqual(engine.currentTime, 5.2, accuracy: 0.2)
+
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+        engine.seek(to: 0.4)
+        XCTAssertEqual(engine.currentTime, 0.4, accuracy: 0.2)
+
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.35))
+        XCTAssertLessThan(engine.currentTime, 1.5)
+        XCTAssertGreaterThan(engine.currentTime, 0.45)
     }
 
     func testBackendFeedPayloadDecodesWithSnakeCaseFields() throws {

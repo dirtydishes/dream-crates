@@ -56,6 +56,7 @@ final class PlaybackController: ObservableObject {
         title: String,
         sourceURL: URL,
         settings: PlaybackSettings,
+        expectedDuration: Double? = nil,
         startTime: Double = 0,
         autoplay: Bool = true
     ) {
@@ -70,6 +71,7 @@ final class PlaybackController: ObservableObject {
                     sourceURL: sourceURL,
                     startTime: startTime,
                     settings: currentSettings,
+                    expectedDuration: expectedDuration,
                     autoplay: autoplay
                 )
             } catch {

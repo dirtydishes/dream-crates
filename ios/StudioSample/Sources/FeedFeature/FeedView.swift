@@ -112,7 +112,8 @@ struct FeedView: View {
             playback.play(
                 title: item.title,
                 sourceURL: sourceURL,
-                settings: playbackPreferences.currentSettings
+                settings: playbackPreferences.currentSettings,
+                expectedDuration: item.durationSeconds.map(Double.init)
             )
         } catch {
             playback.stopAndReset()

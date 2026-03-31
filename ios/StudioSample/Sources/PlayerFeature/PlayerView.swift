@@ -413,22 +413,18 @@ struct PlayerView: View {
     private var playbackSummary: String {
         switch playbackPreferences.mode {
         case .turntable:
-            return String(format: "Turntable keeps pitch tied to speed at %.2fx.", playbackPreferences.speed)
+            return String(format: "%.2fx, pitch linked.", playbackPreferences.speed)
         case .warp:
-            return String(
-                format: "Warp runs at %.2fx with %@.",
-                playbackPreferences.speed,
-                String(format: "%+.0f st transpose", playbackPreferences.transposeSemitones)
-            )
+            return String(format: "%.2fx, %+.0f st.", playbackPreferences.speed, playbackPreferences.transposeSemitones)
         }
     }
 
     private var playbackHint: String {
         switch playbackPreferences.mode {
         case .turntable:
-            return "Turntable keeps playback immediate and moves pitch with speed."
+            return "Pitch follows speed."
         case .warp:
-            return "Warp keeps tempo and pitch independent using local on-device processing."
+            return "Speed and pitch stay separate."
         }
     }
 
@@ -446,7 +442,8 @@ struct PlayerView: View {
             playback.play(
                 title: item.title,
                 sourceURL: sourceURL,
-                settings: playbackPreferences.currentSettings
+                settings: playbackPreferences.currentSettings,
+                expectedDuration: item.durationSeconds.map(Double.init)
             )
         } catch {
             playback.stopAndReset()
@@ -503,6 +500,7 @@ struct PlayerView: View {
                 title: selected.title,
                 sourceURL: sourceURL,
                 settings: playbackPreferences.currentSettings,
+                expectedDuration: selected.durationSeconds.map(Double.init),
                 startTime: startTime,
                 autoplay: wasPlaying
             )

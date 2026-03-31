@@ -1,5 +1,34 @@
 import AVFoundation
 
+struct PlaybackTimeline {
+    let speed: Double
+
+    private var effectiveSpeed: Double {
+        max(speed, 0.01)
+    }
+
+    func displayTime(fromSourceTime sourceTime: Double) -> Double {
+        sourceTime / effectiveSpeed
+    }
+
+    func sourceTime(fromDisplayTime displayTime: Double) -> Double {
+        displayTime * effectiveSpeed
+    }
+
+    func displayDuration(fromSourceDuration sourceDuration: Double) -> Double {
+        sourceDuration / effectiveSpeed
+    }
+
+    static func sourceTime(
+        scheduledStartTime: Double,
+        playerSampleTime: AVAudioFramePosition,
+        playerSampleRate: Double
+    ) -> Double {
+        guard playerSampleRate > 0 else { return scheduledStartTime }
+        return scheduledStartTime + (Double(playerSampleTime) / playerSampleRate)
+    }
+}
+
 @MainActor
 protocol PlaybackEngine: AnyObject {
     var isPlaying: Bool { get }
@@ -10,7 +39,13 @@ protocol PlaybackEngine: AnyObject {
     var onPlaybackEnded: (() -> Void)? { get set }
     var onPlaybackFailed: (() -> Void)? { get set }
 
-    func load(sourceURL: URL, startTime: Double, settings: PlaybackSettings, autoplay: Bool) throws
+    func load(
+        sourceURL: URL,
+        startTime: Double,
+        settings: PlaybackSettings,
+        expectedDuration: Double?,
+        autoplay: Bool
+    ) throws
     func play()
     func pause()
     func seek(to seconds: Double)
@@ -25,7 +60,8 @@ final class TurntablePlaybackEngine: PlaybackEngine {
 
     private let player: AVPlayer
     private var currentRate: Float = 1.0
-    private var currentDuration: Double = 0
+    private var sourceDuration: Double = 0
+    private var expectedSourceDuration: Double?
     private var playbackEndedObserver: NSObjectProtocol?
     private var itemStatusObserver: NSKeyValueObservation?
 
@@ -47,14 +83,32 @@ final class TurntablePlaybackEngine: PlaybackEngine {
 
     var currentTime: Double {
         let seconds = player.currentTime().seconds
-        return seconds.isFinite ? seconds : 0
+        let sourceTime = seconds.isFinite ? seconds : 0
+        return timeline.displayTime(fromSourceTime: sourceTime)
     }
 
     var duration: Double {
-        if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite {
-            return itemDuration
+        let sourceTime = preferredSourceDuration
+        return timeline.displayDuration(fromSourceDuration: sourceTime)
+    }
+
+    private var timeline: PlaybackTimeline {
+        PlaybackTimeline(speed: Double(currentRate))
+    }
+
+    private var rawDuration: Double {
+        let itemDuration = player.currentItem?.duration.seconds
+        if itemDuration?.isFinite == true {
+            return itemDuration!
         }
-        return currentDuration
+        return sourceDuration
+    }
+
+    private var preferredSourceDuration: Double {
+        if let expectedSourceDuration, expectedSourceDuration > 0 {
+            return expectedSourceDuration
+        }
+        return rawDuration
     }
 
     var hasItem: Bool {
@@ -65,7 +119,13 @@ final class TurntablePlaybackEngine: PlaybackEngine {
         (player.currentItem?.asset as? AVURLAsset)?.url
     }
 
-    func load(sourceURL: URL, startTime: Double, settings: PlaybackSettings, autoplay: Bool) throws {
+    func load(
+        sourceURL: URL,
+        startTime: Double,
+        settings: PlaybackSettings,
+        expectedDuration: Double?,
+        autoplay: Bool
+    ) throws {
         let asset = AVURLAsset(
             url: sourceURL,
             options: [AVURLAssetPreferPreciseDurationAndTimingKey: true]
@@ -77,13 +137,14 @@ final class TurntablePlaybackEngine: PlaybackEngine {
         observePlaybackEnded(for: item)
 
         player.replaceCurrentItem(with: item)
-        currentDuration = 0
+        sourceDuration = 0
+        expectedSourceDuration = expectedDuration
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 let duration = try await asset.load(.duration).seconds
                 if duration.isFinite {
-                    self.currentDuration = duration
+                    self.sourceDuration = duration
                 }
             } catch {
                 // Keep the player usable even if duration metadata loads late or fails.
@@ -108,8 +169,14 @@ final class TurntablePlaybackEngine: PlaybackEngine {
     func seek(to seconds: Double) {
         guard hasItem else { return }
         let target = max(0, min(seconds, duration.isFinite && duration > 0 ? duration : seconds))
+        let sourceTarget = timeline.sourceTime(fromDisplayTime: target)
+        let maxSourceDuration = preferredSourceDuration
+        let clampedSourceTarget = max(
+            0,
+            min(sourceTarget, maxSourceDuration.isFinite && maxSourceDuration > 0 ? maxSourceDuration : sourceTarget)
+        )
         player.seek(
-            to: CMTime(seconds: target, preferredTimescale: 600),
+            to: CMTime(seconds: clampedSourceTarget, preferredTimescale: 600),
             toleranceBefore: .zero,
             toleranceAfter: .zero
         )
@@ -118,7 +185,8 @@ final class TurntablePlaybackEngine: PlaybackEngine {
     func stop() {
         player.pause()
         player.replaceCurrentItem(with: nil)
-        currentDuration = 0
+        sourceDuration = 0
+        expectedSourceDuration = nil
         itemStatusObserver = nil
         if let playbackEndedObserver {
             NotificationCenter.default.removeObserver(playbackEndedObserver)
@@ -141,7 +209,7 @@ final class TurntablePlaybackEngine: PlaybackEngine {
                 if observedItem.status == .readyToPlay {
                     let duration = observedItem.duration.seconds
                     if duration.isFinite {
-                        self.currentDuration = duration
+                        self.sourceDuration = duration
                     }
                 } else if observedItem.status == .failed {
                     self.onPlaybackFailed?()
@@ -178,9 +246,12 @@ final class WarpPlaybackEngine: PlaybackEngine {
 
     private var currentFile: AVAudioFile?
     private var currentFileURL: URL?
-    private var pausedTime: Double = 0
-    private var durationSeconds: Double = 0
-    private var scheduledStartFrame: AVAudioFramePosition = 0
+    private var currentSettings = PlaybackSettings(mode: .warp)
+    private var pausedSourceTime: Double = 0
+    private var sourceDurationSeconds: Double = 0
+    private var pausedDisplayTime: Double = 0
+    private var playbackAnchorDisplayTime: Double = 0
+    private var playbackAnchorHostTime: CFTimeInterval?
     private var completionToken = UUID()
 
     init(
@@ -204,21 +275,17 @@ final class WarpPlaybackEngine: PlaybackEngine {
     }
 
     var currentTime: Double {
-        guard let currentFile else { return 0 }
-        guard isPlaying,
-              let nodeTime = playerNode.lastRenderTime,
-              let playerTime = playerNode.playerTime(forNodeTime: nodeTime)
-        else {
-            return pausedTime
+        let displayTime: Double
+        if isPlaying, let playbackAnchorHostTime {
+            displayTime = playbackAnchorDisplayTime + max(CACurrentMediaTime() - playbackAnchorHostTime, 0)
+        } else {
+            displayTime = pausedDisplayTime
         }
-
-        let sampleRate = currentFile.processingFormat.sampleRate
-        let elapsed = Double(scheduledStartFrame + AVAudioFramePosition(playerTime.sampleTime)) / sampleRate
-        return min(max(elapsed, 0), durationSeconds)
+        return min(max(displayTime, 0), duration)
     }
 
     var duration: Double {
-        durationSeconds
+        timeline.displayDuration(fromSourceDuration: sourceDurationSeconds)
     }
 
     var hasItem: Bool {
@@ -229,37 +296,48 @@ final class WarpPlaybackEngine: PlaybackEngine {
         currentFileURL
     }
 
-    func load(sourceURL: URL, startTime: Double, settings: PlaybackSettings, autoplay: Bool) throws {
+    func load(
+        sourceURL: URL,
+        startTime: Double,
+        settings: PlaybackSettings,
+        expectedDuration _: Double?,
+        autoplay: Bool
+    ) throws {
         if currentFileURL != sourceURL {
             currentFile = try AVAudioFile(forReading: sourceURL)
             currentFileURL = sourceURL
             if let currentFile {
-                durationSeconds = Double(currentFile.length) / currentFile.processingFormat.sampleRate
+                sourceDurationSeconds = Double(currentFile.length) / currentFile.processingFormat.sampleRate
             } else {
-                durationSeconds = 0
+                sourceDurationSeconds = 0
             }
         }
 
-        update(settings: settings)
+        currentSettings = settings
+        applyNodeSettings(settings)
         try ensureEngineRunning()
         try schedulePlayback(at: startTime, autoplay: autoplay)
     }
 
     func play() {
         guard hasItem else { return }
-        if currentTime >= max(durationSeconds - 0.05, 0), durationSeconds > 0 {
+        if currentTime >= max(duration - 0.05, 0), duration > 0 {
             seek(to: 0)
         }
         do {
             try ensureEngineRunning()
             playerNode.play()
+            playbackAnchorDisplayTime = pausedDisplayTime
+            playbackAnchorHostTime = CACurrentMediaTime()
         } catch {
             onPlaybackFailed?()
         }
     }
 
     func pause() {
-        pausedTime = currentTime
+        pausedDisplayTime = currentTime
+        pausedSourceTime = timeline.sourceTime(fromDisplayTime: pausedDisplayTime)
+        playbackAnchorHostTime = nil
         playerNode.pause()
     }
 
@@ -276,16 +354,39 @@ final class WarpPlaybackEngine: PlaybackEngine {
     func stop() {
         completionToken = UUID()
         playerNode.stop()
-        pausedTime = 0
-        durationSeconds = 0
-        scheduledStartFrame = 0
+        pausedSourceTime = 0
+        sourceDurationSeconds = 0
+        pausedDisplayTime = 0
+        playbackAnchorDisplayTime = 0
+        playbackAnchorHostTime = nil
         currentFile = nil
         currentFileURL = nil
     }
 
     func update(settings: PlaybackSettings) {
-        timePitch.rate = Float(settings.speed)
-        timePitch.pitch = Float(settings.effectiveTransposeSemitones * 100)
+        let displayTime = currentTime
+        let sourceTime = timeline.sourceTime(fromDisplayTime: displayTime)
+        let shouldAutoplay = isPlaying
+        let previousSettings = currentSettings
+        currentSettings = settings
+        applyNodeSettings(settings)
+
+        guard hasItem else { return }
+        let needsReschedule =
+            previousSettings.speed != settings.speed ||
+            previousSettings.effectiveTransposeSemitones != settings.effectiveTransposeSemitones
+        guard needsReschedule else { return }
+
+        do {
+            try ensureEngineRunning()
+            try schedulePlayback(atSourceTime: sourceTime, autoplay: shouldAutoplay)
+        } catch {
+            onPlaybackFailed?()
+        }
+    }
+
+    private var timeline: PlaybackTimeline {
+        PlaybackTimeline(speed: currentSettings.speed)
     }
 
     private func ensureEngineRunning() throws {
@@ -294,21 +395,39 @@ final class WarpPlaybackEngine: PlaybackEngine {
     }
 
     private func schedulePlayback(at seconds: Double, autoplay: Bool) throws {
+        let clampedTime = max(0, min(seconds, duration))
+        let startSourceTime = timeline.sourceTime(fromDisplayTime: clampedTime)
+        try schedulePlayback(atSourceTime: startSourceTime, autoplay: autoplay)
+    }
+
+    private func applyNodeSettings(_ settings: PlaybackSettings) {
+        timePitch.rate = Float(settings.speed)
+        timePitch.pitch = Float(settings.effectiveTransposeSemitones * 100)
+    }
+
+    private func schedulePlayback(atSourceTime sourceTime: Double, autoplay: Bool) throws {
+        if let currentFileURL {
+            currentFile = try AVAudioFile(forReading: currentFileURL)
+        }
         guard let currentFile else { return }
 
         let sampleRate = currentFile.processingFormat.sampleRate
-        let clampedTime = max(0, min(seconds, durationSeconds))
-        let startFrame = AVAudioFramePosition(clampedTime * sampleRate)
+        let clampedSourceTime = max(0, min(sourceTime, sourceDurationSeconds))
+        let clampedDisplayTime = timeline.displayTime(fromSourceTime: clampedSourceTime)
+        let startFrame = AVAudioFramePosition(clampedSourceTime * sampleRate)
         let remainingFrameCount = max(currentFile.length - startFrame, 0)
 
         completionToken = UUID()
-        pausedTime = clampedTime
-        scheduledStartFrame = startFrame
+        pausedSourceTime = clampedSourceTime
+        pausedDisplayTime = clampedDisplayTime
+        playbackAnchorDisplayTime = clampedDisplayTime
+        playbackAnchorHostTime = nil
         playerNode.stop()
         playerNode.reset()
 
         guard remainingFrameCount > 0 else {
-            pausedTime = durationSeconds
+            pausedSourceTime = sourceDurationSeconds
+            pausedDisplayTime = duration
             onPlaybackEnded?()
             return
         }
@@ -324,13 +443,17 @@ final class WarpPlaybackEngine: PlaybackEngine {
             guard let self else { return }
             Task { @MainActor in
                 guard self.completionToken == token else { return }
-                self.pausedTime = self.durationSeconds
+                self.pausedSourceTime = self.sourceDurationSeconds
+                self.pausedDisplayTime = self.duration
+                self.playbackAnchorHostTime = nil
                 self.onPlaybackEnded?()
             }
         }
 
         if autoplay {
             playerNode.play()
+            playbackAnchorDisplayTime = clampedDisplayTime
+            playbackAnchorHostTime = CACurrentMediaTime()
         }
     }
 }
