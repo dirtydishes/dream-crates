@@ -25,11 +25,12 @@ struct FeedView: View {
                         .contextMenu {
                             Button {
                                 Task {
-                                    await store.download(sampleID: item.id)
+                                    await store.toggleDownload(sampleID: item.id)
                                 }
                             } label: {
                                 Label(downloadLabel(for: item.downloadState), systemImage: downloadIcon(for: item.downloadState))
                             }
+                            .disabled(item.downloadState == .queued || item.downloadState == .downloading)
 
                             Button {
                                 Task {
@@ -52,11 +53,12 @@ struct FeedView: View {
                         Menu {
                             Button {
                                 Task {
-                                    await store.download(sampleID: current.id)
+                                    await store.toggleDownload(sampleID: current.id)
                                 }
                             } label: {
                                 Label(downloadLabel(for: current.downloadState), systemImage: downloadIcon(for: current.downloadState))
                             }
+                            .disabled(current.downloadState == .queued || current.downloadState == .downloading)
 
                             Button {
                                 Task {
@@ -122,7 +124,7 @@ struct FeedView: View {
         case .notDownloaded: return "Download"
         case .queued: return "Queued"
         case .downloading: return "Downloading"
-        case .downloaded: return "Redownload"
+        case .downloaded: return "Remove Download"
         case .failed: return "Retry"
         }
     }
@@ -132,7 +134,7 @@ struct FeedView: View {
         case .notDownloaded: return "arrow.down.circle"
         case .queued: return "clock.arrow.circlepath"
         case .downloading: return "arrow.down.circle"
-        case .downloaded: return "arrow.trianglehead.clockwise"
+        case .downloaded: return "arrow.down.circle.slash"
         case .failed: return "exclamationmark.arrow.circlepath"
         }
     }

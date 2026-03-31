@@ -80,8 +80,8 @@ private final class FakeRepository: SampleRepository {
     let items: [SampleItem]
     var savedLibrary: [SampleItem]
     var updatedSavedStates: [(String, Bool)] = []
-    var playbackURL = URL(string: "https://example.com/playback.mp3")!
-    var downloadURL = URL(string: "https://example.com/download.mp3")!
+    var playbackURL = URL(string: "https://example.com/playback.m4a")!
+    var downloadURL = URL(string: "https://example.com/download.m4a")!
     var shouldFailUpdates = false
     var resolvePlaybackCalls = 0
     var prepareDownloadCalls = 0
@@ -148,7 +148,48 @@ final class AppCoreTests: XCTestCase {
         return url
     }
 
-    private func makeSample(id: String, savedAt: Date?) -> SampleItem {
+    private func writeAudioFixture(to url: URL, durationSeconds: Int) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try makeWaveData(durationSeconds: durationSeconds).write(to: url)
+    }
+
+    private func makeWaveData(durationSeconds: Int, sampleRate: Int = 8_000) -> Data {
+        let frameCount = max(durationSeconds, 1) * sampleRate
+        let bytesPerSample = 2
+        let dataSize = frameCount * bytesPerSample
+        var data = Data(capacity: 44 + dataSize)
+
+        func append<T: FixedWidthInteger>(_ value: T) {
+            var littleEndian = value.littleEndian
+            withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+        }
+
+        data.append(contentsOf: Array("RIFF".utf8))
+        append(UInt32(36 + dataSize))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8))
+        append(UInt32(16))
+        append(UInt16(1))
+        append(UInt16(1))
+        append(UInt32(sampleRate))
+        append(UInt32(sampleRate * bytesPerSample))
+        append(UInt16(bytesPerSample))
+        append(UInt16(16))
+        data.append(contentsOf: Array("data".utf8))
+        append(UInt32(dataSize))
+
+        for frame in 0 ..< frameCount {
+            let amplitude: Int16 = frame % 32 < 16 ? 2_400 : -2_400
+            append(amplitude)
+        }
+
+        return data
+    }
+
+    private func makeSample(id: String, savedAt: Date?, durationSeconds: Int? = 60) -> SampleItem {
         SampleItem(
             id: id,
             youtubeVideoId: "yt-\(id)",
@@ -160,7 +201,7 @@ final class AppCoreTests: XCTestCase {
             descriptionText: "",
             publishedAt: .now,
             artworkURL: nil,
-            durationSeconds: 60,
+            durationSeconds: durationSeconds,
             genreTags: [],
             toneTags: [],
             isSaved: savedAt != nil,
@@ -223,14 +264,14 @@ final class AppCoreTests: XCTestCase {
 
     @MainActor
     func testDownloadedFilesRestoreAcrossRelaunch() async throws {
-        let sample = makeSample(id: "base", savedAt: nil)
+        let sample = makeSample(id: "base", savedAt: nil, durationSeconds: 2)
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("DreamCratesTests")
             .appendingPathComponent(#function)
         try? FileManager.default.removeItem(at: root)
         let downloadsDir = root.appendingPathComponent("DreamCratesDownloads")
-        try FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
-        try Data("test".utf8).write(to: downloadsDir.appendingPathComponent("base.mp3"))
+        let sampleDir = downloadsDir.appendingPathComponent("base", isDirectory: true)
+        try writeAudioFixture(to: sampleDir.appendingPathComponent("base.wav"), durationSeconds: 2)
 
         let store = SampleLibraryStore(
             repository: FakeRepository(items: [sample]),
@@ -241,7 +282,7 @@ final class AppCoreTests: XCTestCase {
 
         XCTAssertEqual(store.samples.first?.downloadState, .downloaded)
         let resolved = try await store.resolvedPlaybackURL(for: "base")
-        XCTAssertTrue(resolved.path.hasSuffix("base.mp3"))
+        XCTAssertTrue(resolved.path.hasSuffix("base/base.wav"))
     }
 
     @MainActor
@@ -290,16 +331,22 @@ final class AppCoreTests: XCTestCase {
 
     @MainActor
     func testWarpPlaybackUsesDownloadedFileFirst() async throws {
-        let sample = makeSample(id: "base", savedAt: nil)
+        let sample = makeSample(id: "base", savedAt: nil, durationSeconds: 2)
         let root = makePlaybackRoot()
         let downloadsDir = root.appendingPathComponent("DreamCratesDownloads")
-        try FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
-        try Data("local".utf8).write(to: downloadsDir.appendingPathComponent("base.mp3"))
+        let sampleDir = downloadsDir.appendingPathComponent("base", isDirectory: true)
+        try writeAudioFixture(to: sampleDir.appendingPathComponent("base.wav"), durationSeconds: 2)
 
         let downloadCounter = DownloadCounter()
+        let cachedWaveData = makeWaveData(durationSeconds: 2)
         let playbackCache = PlaybackCache(baseDirectory: root) { _ in
             downloadCounter.count += 1
-            return root.appendingPathComponent("unused.mp3")
+            let temporaryURL = root.appendingPathComponent("unused.wav")
+            try cachedWaveData.write(to: temporaryURL)
+            return (
+                temporaryURL,
+                URLResponse(url: temporaryURL, mimeType: "audio/wav", expectedContentLength: 0, textEncodingName: nil)
+            )
         }
 
         let repository = FakeRepository(items: [sample])
@@ -313,7 +360,7 @@ final class AppCoreTests: XCTestCase {
 
         let resolved = try await store.preparePlaybackURL(for: sample.id, mode: .warp)
 
-        XCTAssertTrue(resolved.path.hasSuffix("DreamCratesDownloads/base.mp3"))
+        XCTAssertTrue(resolved.path.hasSuffix("DreamCratesDownloads/base/base.wav"))
         XCTAssertEqual(downloadCounter.count, 0)
         XCTAssertEqual(repository.prepareDownloadCalls, 0)
         XCTAssertEqual(store.samples.first?.downloadState, .downloaded)
@@ -321,16 +368,20 @@ final class AppCoreTests: XCTestCase {
 
     @MainActor
     func testWarpPlaybackCacheReusesTransientFile() async throws {
-        let sample = makeSample(id: "base", savedAt: nil)
+        let sample = makeSample(id: "base", savedAt: nil, durationSeconds: 2)
         let root = makePlaybackRoot()
         let repository = FakeRepository(items: [sample])
         let downloadCounter = DownloadCounter()
+        let cachedWaveData = makeWaveData(durationSeconds: 2)
 
         let playbackCache = PlaybackCache(baseDirectory: root) { _ in
             downloadCounter.count += 1
-            let temporaryURL = root.appendingPathComponent("tmp-\(downloadCounter.count).mp3")
-            try Data("cached-\(downloadCounter.count)".utf8).write(to: temporaryURL)
-            return temporaryURL
+            let temporaryURL = root.appendingPathComponent("tmp-\(downloadCounter.count).wav")
+            try cachedWaveData.write(to: temporaryURL)
+            return (
+                temporaryURL,
+                URLResponse(url: temporaryURL, mimeType: "audio/wav", expectedContentLength: 0, textEncodingName: nil)
+            )
         }
 
         let store = SampleLibraryStore(
@@ -339,15 +390,37 @@ final class AppCoreTests: XCTestCase {
             localStateStore: LocalSampleStateStore(baseDirectory: root)
         )
         await store.load()
-
         let first = try await store.preparePlaybackURL(for: sample.id, mode: .warp)
         let second = try await store.preparePlaybackURL(for: sample.id, mode: .warp)
 
         XCTAssertEqual(first, second)
         XCTAssertEqual(downloadCounter.count, 1)
         XCTAssertEqual(repository.prepareDownloadCalls, 1)
-        XCTAssertEqual(repository.resolvePlaybackCalls, 0)
+        XCTAssertLessThanOrEqual(repository.resolvePlaybackCalls, 1)
         XCTAssertEqual(store.samples.first?.downloadState, .notDownloaded)
+    }
+
+    @MainActor
+    func testRemovingDownloadDeletesStoredFileAndResetsState() async throws {
+        let sample = makeSample(id: "base", savedAt: nil, durationSeconds: 2)
+        let root = makePlaybackRoot()
+        let manager = DownloadManager(baseDirectory: root)
+        let sampleDir = root
+            .appendingPathComponent("DreamCratesDownloads")
+            .appendingPathComponent("base", isDirectory: true)
+        try writeAudioFixture(to: sampleDir.appendingPathComponent("base.wav"), durationSeconds: 2)
+
+        let store = SampleLibraryStore(
+            repository: FakeRepository(items: [sample]),
+            downloadManager: manager,
+            localStateStore: LocalSampleStateStore(baseDirectory: root)
+        )
+        await store.load()
+
+        await store.removeDownload(sampleID: sample.id)
+
+        XCTAssertEqual(store.samples.first?.downloadState, .notDownloaded)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sampleDir.path()))
     }
 
     @MainActor

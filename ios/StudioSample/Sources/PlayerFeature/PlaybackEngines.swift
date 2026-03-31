@@ -66,7 +66,11 @@ final class TurntablePlaybackEngine: PlaybackEngine {
     }
 
     func load(sourceURL: URL, startTime: Double, settings: PlaybackSettings, autoplay: Bool) throws {
-        let item = AVPlayerItem(url: sourceURL)
+        let asset = AVURLAsset(
+            url: sourceURL,
+            options: [AVURLAssetPreferPreciseDurationAndTimingKey: true]
+        )
+        let item = AVPlayerItem(asset: asset)
         item.preferredForwardBufferDuration = 5
         item.audioTimePitchAlgorithm = .varispeed
         observeStatus(for: item)
@@ -74,6 +78,17 @@ final class TurntablePlaybackEngine: PlaybackEngine {
 
         player.replaceCurrentItem(with: item)
         currentDuration = 0
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let duration = try await asset.load(.duration).seconds
+                if duration.isFinite {
+                    self.currentDuration = duration
+                }
+            } catch {
+                // Keep the player usable even if duration metadata loads late or fails.
+            }
+        }
         update(settings: settings)
         if startTime > 0 {
             seek(to: startTime)
@@ -83,8 +98,7 @@ final class TurntablePlaybackEngine: PlaybackEngine {
 
     func play() {
         guard hasItem else { return }
-        player.play()
-        player.rate = currentRate
+        player.playImmediately(atRate: currentRate)
     }
 
     func pause() {
@@ -124,7 +138,12 @@ final class TurntablePlaybackEngine: PlaybackEngine {
         itemStatusObserver = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
             guard let self else { return }
             Task { @MainActor in
-                if observedItem.status == .failed {
+                if observedItem.status == .readyToPlay {
+                    let duration = observedItem.duration.seconds
+                    if duration.isFinite {
+                        self.currentDuration = duration
+                    }
+                } else if observedItem.status == .failed {
                     self.onPlaybackFailed?()
                 }
             }

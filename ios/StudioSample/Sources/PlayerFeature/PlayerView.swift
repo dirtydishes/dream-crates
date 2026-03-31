@@ -6,6 +6,7 @@ struct PlayerView: View {
     @EnvironmentObject private var playbackPreferences: PlaybackPreferencesStore
 
     private let baseSpinDuration = 3.2
+    private let recordArtworkScale = 1.08
 
     @State private var rotation: Double = 0
     @State private var spinner: Task<Void, Never>?
@@ -128,6 +129,7 @@ struct PlayerView: View {
                         image
                             .resizable()
                             .scaledToFill()
+                            .scaleEffect(recordArtworkScale)
                     } placeholder: {
                         ProgressView()
                             .tint(AppTheme.label)
@@ -139,9 +141,10 @@ struct PlayerView: View {
                             .font(.system(size: 48, weight: .semibold))
                             .foregroundStyle(AppTheme.label.opacity(0.8))
                     }
+                    .scaleEffect(recordArtworkScale)
                 }
             }
-            .frame(width: 252, height: 252)
+            .frame(width: 260, height: 260)
             .clipShape(Circle())
 
             Circle()
@@ -153,23 +156,23 @@ struct PlayerView: View {
                         endRadius: 126
                     )
                 )
-                .frame(width: 252, height: 252)
+                .frame(width: 260, height: 260)
 
             Circle()
                 .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                .frame(width: 252, height: 252)
+                .frame(width: 260, height: 260)
 
             Circle()
                 .stroke(Color.black.opacity(0.28), lineWidth: 1)
-                .frame(width: 228, height: 228)
+                .frame(width: 234, height: 234)
 
             Circle()
                 .stroke(Color.black.opacity(0.22), lineWidth: 1)
-                .frame(width: 194, height: 194)
+                .frame(width: 200, height: 200)
 
             Circle()
                 .stroke(Color.black.opacity(0.18), lineWidth: 1)
-                .frame(width: 160, height: 160)
+                .frame(width: 166, height: 166)
 
             Circle()
                 .fill(AppTheme.accent)

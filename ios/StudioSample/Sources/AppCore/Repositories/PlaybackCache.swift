@@ -1,7 +1,8 @@
 import Foundation
+import UniformTypeIdentifiers
 
 actor PlaybackCache {
-    typealias DownloadOperation = @Sendable (URL) async throws -> URL
+    typealias DownloadOperation = @Sendable (URL) async throws -> (temporaryURL: URL, response: URLResponse)
 
     private let fileManager: FileManager
     private let baseDirectory: URL?
@@ -12,8 +13,8 @@ actor PlaybackCache {
         fileManager: FileManager = .default,
         baseDirectory: URL? = nil,
         downloadOperation: @escaping DownloadOperation = { url in
-            let (tmpURL, _) = try await URLSession.shared.download(from: url)
-            return tmpURL
+            let (tmpURL, response) = try await URLSession.shared.download(from: url)
+            return (tmpURL, response)
         }
     ) {
         self.fileManager = fileManager
@@ -45,11 +46,12 @@ actor PlaybackCache {
         }
 
         let task = Task { [downloadOperation] in
-            let tmpURL = try await downloadOperation(remoteURL)
+            let download = try await downloadOperation(remoteURL)
             return try await self.storeDownloadedFile(
                 sampleID: sampleID,
-                temporaryURL: tmpURL,
-                remoteURL: remoteURL
+                temporaryURL: download.temporaryURL,
+                remoteURL: remoteURL,
+                response: download.response
             )
         }
         inflightDownloads[sampleID] = task
@@ -58,11 +60,25 @@ actor PlaybackCache {
         return try await task.value
     }
 
-    private func storeDownloadedFile(sampleID: String, temporaryURL: URL, remoteURL: URL) async throws -> URL {
+    func removeCachedURL(for sampleID: String) throws {
+        let directory = try sampleDirectory(for: sampleID, createDirectory: false)
+        if fileManager.fileExists(atPath: directory.path()) {
+            try fileManager.removeItem(at: directory)
+        }
+    }
+
+    private func storeDownloadedFile(
+        sampleID: String,
+        temporaryURL: URL,
+        remoteURL: URL,
+        response: URLResponse
+    ) async throws -> URL {
         let directory = try sampleDirectory(for: sampleID, createDirectory: true)
         try removeExistingFiles(in: directory)
 
-        let destination = directory.appendingPathComponent(destinationFilename(remoteURL: remoteURL))
+        let destination = directory.appendingPathComponent(
+            destinationFilename(remoteURL: remoteURL, response: response)
+        )
         if fileManager.fileExists(atPath: destination.path()) {
             try fileManager.removeItem(at: destination)
         }
@@ -90,12 +106,33 @@ actor PlaybackCache {
         }
     }
 
-    private func destinationFilename(remoteURL: URL) -> String {
-        let ext = remoteURL.pathExtension
+    private func destinationFilename(remoteURL: URL, response: URLResponse) -> String {
+        if let suggested = response.suggestedFilename, !suggested.isEmpty {
+            return suggested
+        }
+
+        let ext = preferredExtension(remoteURL: remoteURL, response: response)
         guard !ext.isEmpty else {
             return "playback"
         }
         return "playback.\(ext)"
+    }
+
+    private func preferredExtension(remoteURL: URL, response: URLResponse) -> String {
+        if let suggested = response.suggestedFilename {
+            let ext = URL(fileURLWithPath: suggested).pathExtension
+            if !ext.isEmpty {
+                return ext.lowercased()
+            }
+        }
+
+        if let mimeType = response.mimeType,
+           let type = UTType(mimeType: mimeType),
+           let ext = type.preferredFilenameExtension {
+            return ext.lowercased()
+        }
+
+        return remoteURL.pathExtension.lowercased()
     }
 
     private func cacheDirectory(createIfNeeded: Bool) throws -> URL {
