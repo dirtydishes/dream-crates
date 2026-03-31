@@ -1,10 +1,12 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi.testclient import TestClient
 
 import app.main as main_mod
 from app.models import SampleItem
 from app.services.channel_catalog import ChannelCatalog
+from app.services.resolver import ResolveResult
 from app.services.youtube_poller import BackfillResult
 
 app = main_mod.app
@@ -34,8 +36,8 @@ def test_download_prepare_returns_url():
     assert response.status_code == 200
     payload = response.json()
     assert payload["sample_id"] == "sample-1"
-    assert payload["download_url"].startswith("https://")
-    assert payload["source"] in {"fallback", "command"}
+    assert payload["download_url"].endswith("/v1/media/sample-1/download")
+    assert payload["source"] == "backend-proxy"
 
 
 def test_playback_resolve_returns_url():
@@ -61,7 +63,80 @@ def test_playback_resolve_returns_url():
     assert response.status_code == 200
     payload = response.json()
     assert payload["sample_id"] == "sample-2"
-    assert payload["playback_url"].startswith("https://")
+    assert payload["playback_url"].endswith("/v1/media/sample-2/stream")
+    assert payload["source"] == "backend-proxy"
+
+
+def test_media_proxy_streams_upstream_audio(monkeypatch):
+    main_mod.store.upsert_samples(
+        [
+            SampleItem(
+                id="sample-proxy",
+                youtube_video_id="yt-proxy",
+                channel_id="channel-1",
+                title="Fresh sample",
+                description_text="",
+                published_at=datetime.now(timezone.utc),
+                genre_tags=[],
+                tone_tags=[],
+                is_saved=False,
+                saved_at=None,
+                download_state="not_downloaded",
+                stream_state="idle",
+            )
+        ]
+    )
+
+    captured_headers: dict[str, str] = {}
+
+    class FakeResolver:
+        def resolve_stream(self, sample):
+            _ = sample
+            return ResolveResult(
+                url="https://media.example/audio.m4a",
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+                source="yt-dlp",
+                headers={"User-Agent": "yt-dlp-test"},
+            )
+
+        def resolve_download(self, sample):
+            return self.resolve_stream(sample)
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            _ = args
+            _ = kwargs
+
+        def build_request(self, method, url, headers=None):
+            return httpx.Request(method, url, headers=headers)
+
+        async def send(self, request, stream=False):
+            _ = stream
+            captured_headers.update(dict(request.headers))
+            return httpx.Response(
+                206,
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": "3",
+                    "Content-Range": "bytes 0-2/3",
+                    "Content-Type": "audio/mp4",
+                },
+                content=b"abc",
+                request=request,
+            )
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(main_mod, "resolver", FakeResolver())
+    monkeypatch.setattr(main_mod.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.get("/v1/media/sample-proxy/stream", headers={"Range": "bytes=0-2"})
+
+    assert response.status_code == 206
+    assert response.content == b"abc"
+    assert captured_headers["range"] == "bytes=0-2"
+    assert captured_headers["user-agent"] == "yt-dlp-test"
 
 
 def test_register_device_and_update_preferences():

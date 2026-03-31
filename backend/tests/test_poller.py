@@ -2,6 +2,8 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
+
 from app.models import Channel, SampleItem
 from app.services.store import SampleStore
 from app.services.tagging import RulesTagger
@@ -159,3 +161,84 @@ def test_backfill_returns_when_channel_history_is_exhausted(tmp_path: Path):
     assert result.exhausted is True
     assert result.channels_processed == 1
     assert len(store.list_recent()) == 1
+
+
+def test_fetch_upload_page_falls_back_to_ytdlp_when_api_is_forbidden(tmp_path: Path, monkeypatch):
+    db_path = str(tmp_path / "test.db")
+    store = SampleStore(db_path)
+    poller = YouTubePoller(
+        api_key="restricted-key",
+        base_url="https://example.com",
+        store=store,
+        tagger=RulesTagger(),
+    )
+
+    async def fake_api(channel_id: str, *, max_results: int, page_token: str | None = None) -> UploadPage:
+        _ = channel_id
+        _ = max_results
+        _ = page_token
+        request = httpx.Request("GET", "https://example.com/search")
+        response = httpx.Response(403, request=request)
+        raise httpx.HTTPStatusError("forbidden", request=request, response=response)
+
+    def fake_ytdlp(channel_id: str, *, max_results: int, page_token: str | None = None) -> UploadPage:
+        _ = channel_id
+        _ = max_results
+        _ = page_token
+        return UploadPage(items=[sample("fallback")], next_page_token=None)
+
+    monkeypatch.setattr(poller, "_fetch_upload_page_via_api", fake_api)
+    monkeypatch.setattr(poller, "_fetch_upload_page_via_ytdlp", fake_ytdlp)
+
+    page = asyncio.run(poller._fetch_upload_page("channel-1", max_results=10))
+
+    assert [item.youtube_video_id for item in page.items] == ["fallback"]
+    assert page.next_page_token is None
+
+
+def test_ytdlp_playlist_pages_are_converted_into_samples(tmp_path: Path, monkeypatch):
+    db_path = str(tmp_path / "test.db")
+    store = SampleStore(db_path)
+    poller = YouTubePoller(
+        api_key="",
+        base_url="https://example.com",
+        store=store,
+        tagger=RulesTagger(),
+    )
+
+    monkeypatch.setattr(
+        "app.services.youtube_poller.run_ytdlp_json",
+        lambda args: {
+            "entries": [
+                {
+                    "id": "abc123",
+                    "title": "Warm Rhodes loop",
+                    "description": "soulful jazz sample",
+                    "duration": 93,
+                    "timestamp": 1774552509,
+                    "channel": "Andre Navarro II",
+                    "uploader_id": "@andrenavarroII",
+                    "thumbnail": "https://example.com/thumb.jpg",
+                },
+                {
+                    "id": "def456",
+                    "title": "Cold synth pad",
+                    "description": "",
+                    "duration": 42,
+                    "upload_date": "20260324",
+                    "channel": "Andre Navarro II",
+                    "uploader_id": "@andrenavarroII",
+                    "thumbnail": "https://example.com/thumb-2.jpg",
+                },
+            ]
+        },
+    )
+
+    page = poller._fetch_upload_page_via_ytdlp("UCv5OAW45h67CJEY6kJLyisg", max_results=2, page_token="0")
+
+    assert [item.youtube_video_id for item in page.items] == ["abc123", "def456"]
+    assert page.next_page_token == "2"
+    assert page.items[0].channel_handle == "@andrenavarroII"
+    assert page.items[0].duration_seconds == 93
+    assert page.items[0].published_at == datetime(2026, 3, 26, 19, 15, 9, tzinfo=timezone.utc)
+    assert page.items[1].published_at == datetime(2026, 3, 24, 0, 0, 0, tzinfo=timezone.utc)

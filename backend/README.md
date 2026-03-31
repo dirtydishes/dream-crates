@@ -53,6 +53,7 @@ Docker deployment details live in `/Users/kell/dev/dream-crates/deploy/docker/RE
 - `PUT /v1/users/{deviceId}/preferences`
 - `POST /v1/playback/resolve`
 - `POST /v1/download/prepare`
+- `GET /v1/media/{sampleId}/{stream|download}`
 
 ## Backfill endpoint
 
@@ -62,6 +63,8 @@ Docker deployment details live in `/Users/kell/dev/dream-crates/deploy/docker/RE
 - `send_notifications` (default `false`)
 
 The endpoint pages through YouTube results in batches of 50, keeps ingesting older unseen uploads across tracked channels until it inserts `limit` rows or runs out of history, and only sends notifications when `send_notifications=true`.
+
+When the YouTube Data API is unavailable or returns authorization/quota errors, the poller falls back to `yt-dlp` against the channel uploads playlist so feed ingestion does not depend on a working API key.
 
 ## APNs configuration
 Set these environment variables to enable live push delivery:
@@ -82,6 +85,8 @@ Resolution can use either:
 - `STUDIO_RESOLVER_TTL_SECONDS`: default expiry when the resolver does not provide one
 
 The command template supports `{video_id}`, `{sample_id}`, and `{mode}` placeholders.
+
+The app-facing resolve endpoints now return backend proxy URLs under `/v1/media/...`. The backend re-resolves the upstream YouTube media URL server-side and streams it to clients so iOS devices are not handed IP-bound `googlevideo` URLs directly.
 
 For the containerized deployment, `deploy/docker/dream-crates.env.example` wires this to:
 

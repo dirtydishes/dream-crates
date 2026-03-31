@@ -12,4 +12,4 @@ source .venv/bin/activate
 python -m pip install --upgrade pip >/dev/null
 python -m pip install -e .[dev] >/dev/null
 
-pytest -q tests
+python -m pytest -q tests

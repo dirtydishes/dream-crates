@@ -13,6 +13,7 @@ class ResolveResult:
     url: str
     expires_at: datetime
     source: str
+    headers: dict[str, str]
 
 
 class PlaybackResolver:
@@ -26,6 +27,7 @@ class PlaybackResolver:
         self.command_template = command_template.strip()
         self.fallback_url = fallback_url
         self.ttl_seconds = ttl_seconds
+        self._cache: dict[tuple[str, str], ResolveResult] = {}
 
     def resolve_stream(self, sample: SampleItem) -> ResolveResult:
         return self._resolve(sample, mode="stream")
@@ -34,16 +36,26 @@ class PlaybackResolver:
         return self._resolve(sample, mode="download")
 
     def _resolve(self, sample: SampleItem, *, mode: str) -> ResolveResult:
+        cache_key = (sample.id, mode)
+        cached = self._cache.get(cache_key)
+        now = datetime.now(timezone.utc)
+        if cached is not None and cached.expires_at > now + timedelta(seconds=30):
+            return cached
+
         if self.command_template:
             resolved = self._resolve_via_command(sample, mode=mode)
             if resolved is not None:
+                self._cache[cache_key] = resolved
                 return resolved
 
-        return ResolveResult(
+        fallback = ResolveResult(
             url=self.fallback_url,
-            expires_at=datetime.now(timezone.utc) + timedelta(seconds=self.ttl_seconds),
+            expires_at=now + timedelta(seconds=self.ttl_seconds),
             source="fallback",
+            headers={},
         )
+        self._cache[cache_key] = fallback
+        return fallback
 
     def _resolve_via_command(self, sample: SampleItem, *, mode: str) -> ResolveResult | None:
         command = self.command_template.format(
@@ -75,4 +87,10 @@ class PlaybackResolver:
             else datetime.now(timezone.utc) + timedelta(seconds=self.ttl_seconds)
         )
         source = payload.get("source", "command")
-        return ResolveResult(url=url, expires_at=expires_at, source=source)
+        headers = payload.get("headers") or {}
+        return ResolveResult(
+            url=url,
+            expires_at=expires_at,
+            source=source,
+            headers={str(key): str(value) for key, value in headers.items() if value is not None},
+        )

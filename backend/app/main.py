@@ -1,7 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import logging
 
-from fastapi import Body, FastAPI, HTTPException
+import httpx
+from fastapi import Body, FastAPI, HTTPException, Request, Response
+from starlette.background import BackgroundTask
+from starlette.responses import StreamingResponse
 
 from app.config import settings
 from app.models import (
@@ -151,32 +154,77 @@ async def put_library(device_id: str, sample_id: str, saved: bool = True):
 
 
 @app.post("/v1/playback/resolve", response_model=PlaybackResolveResponse)
-async def resolve_playback(body: PlaybackResolveRequest):
+async def resolve_playback(request: Request, body: PlaybackResolveRequest):
     sample = store.get_sample(body.sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail=f"Unknown sample: {body.sample_id}")
 
-    resolved = resolver.resolve_stream(sample)
     return PlaybackResolveResponse(
         sample_id=body.sample_id,
-        playback_url=resolved.url,
-        expires_at=resolved.expires_at,
-        source=resolved.source,
+        playback_url=str(request.url_for("media_proxy", sample_id=body.sample_id, mode="stream")),
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=settings.resolver_ttl_seconds),
+        source="backend-proxy",
     )
 
 
 @app.post("/v1/download/prepare", response_model=DownloadPrepareResponse)
-async def prepare_download(body: DownloadPrepareRequest):
+async def prepare_download(request: Request, body: DownloadPrepareRequest):
     sample = store.get_sample(body.sample_id)
     if sample is None:
         raise HTTPException(status_code=404, detail=f"Unknown sample: {body.sample_id}")
 
-    resolved = resolver.resolve_download(sample)
     return DownloadPrepareResponse(
         sample_id=body.sample_id,
-        download_url=resolved.url,
-        expires_at=resolved.expires_at,
-        source=resolved.source,
+        download_url=str(request.url_for("media_proxy", sample_id=body.sample_id, mode="download")),
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=settings.resolver_ttl_seconds),
+        source="backend-proxy",
+    )
+
+
+@app.api_route("/v1/media/{sample_id}/{mode}", methods=["GET", "HEAD"], name="media_proxy")
+async def media_proxy(sample_id: str, mode: str, request: Request):
+    sample = store.get_sample(sample_id)
+    if sample is None:
+        raise HTTPException(status_code=404, detail=f"Unknown sample: {sample_id}")
+
+    if mode == "stream":
+        resolved = resolver.resolve_stream(sample)
+    elif mode == "download":
+        resolved = resolver.resolve_download(sample)
+    else:
+        raise HTTPException(status_code=404, detail=f"Unsupported media mode: {mode}")
+
+    request_headers = dict(resolved.headers)
+    for header_name in ("range", "if-range"):
+        header_value = request.headers.get(header_name)
+        if header_value:
+            request_headers[header_name] = header_value
+
+    client = httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(connect=10.0, read=None, write=30.0, pool=30.0),
+    )
+    upstream_request = client.build_request(request.method, resolved.url, headers=request_headers)
+    try:
+        upstream_response = await client.send(upstream_request, stream=True)
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        logger.exception("Media proxy failed for %s (%s)", sample_id, mode)
+        raise HTTPException(status_code=502, detail="Unable to fetch upstream media") from exc
+
+    proxy_headers = _filter_proxy_headers(upstream_response.headers)
+    if mode == "download" and "content-disposition" not in {name.lower() for name in proxy_headers}:
+        proxy_headers["Content-Disposition"] = f'attachment; filename="{sample_id}.m4a"'
+
+    cleanup = BackgroundTask(_close_upstream_response, upstream_response, client)
+    if request.method == "HEAD":
+        return Response(status_code=upstream_response.status_code, headers=proxy_headers, background=cleanup)
+
+    return StreamingResponse(
+        upstream_response.aiter_bytes(),
+        status_code=upstream_response.status_code,
+        headers=proxy_headers,
+        background=cleanup,
     )
 
 
@@ -212,3 +260,26 @@ async def update_preferences(device_id: str, body: PreferencesUpdateRequest):
         quiet_end_hour=body.quiet_end_hour,
     )
     return {"updated": True, "deviceId": device_id}
+
+
+async def _close_upstream_response(upstream_response: httpx.Response, client: httpx.AsyncClient) -> None:
+    await upstream_response.aclose()
+    await client.aclose()
+
+
+def _filter_proxy_headers(headers: httpx.Headers) -> dict[str, str]:
+    hop_by_hop = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+    return {
+        key: value
+        for key, value in headers.items()
+        if key.lower() not in hop_by_hop
+    }

@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from subprocess import CompletedProcess, run
 import sys
 
-from app.services.ytdlp import pick_media_url
+from app.services.ytdlp import pick_media_headers, pick_media_url, run_ytdlp_json
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,30 +20,18 @@ def main() -> int:
     source_url = f"https://www.youtube.com/watch?v={args.video_id}"
     format_selector = "bestaudio[ext=m4a]/bestaudio/best" if args.mode == "stream" else "bestaudio/best"
 
-    completed: CompletedProcess[str] = run(
-        [
-            "yt-dlp",
-            "--dump-single-json",
-            "--no-playlist",
-            "--no-warnings",
-            "--skip-download",
-            "--format",
-            format_selector,
-            source_url,
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    if completed.returncode != 0:
-        print(completed.stderr.strip() or "yt-dlp failed", file=sys.stderr)
-        return 1
-
     try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError:
-        print("yt-dlp returned invalid JSON", file=sys.stderr)
+        payload = run_ytdlp_json(
+            [
+                "--no-playlist",
+                "--skip-download",
+                "--format",
+                format_selector,
+                source_url,
+            ]
+        )
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
 
     resolved_url = pick_media_url(payload)
@@ -56,6 +43,7 @@ def main() -> int:
         json.dumps(
             {
                 "url": resolved_url,
+                "headers": pick_media_headers(payload),
                 "source": "yt-dlp",
             }
         )

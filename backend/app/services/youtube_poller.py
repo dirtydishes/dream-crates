@@ -1,11 +1,16 @@
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 
 import httpx
 
 from app.models import Channel, SampleItem
 from app.services.store import SampleStore
 from app.services.tagging import RulesTagger
+from app.services.ytdlp import run_ytdlp_json, uploads_playlist_url
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,6 +44,36 @@ class YouTubePoller:
         max_results: int,
         page_token: str | None = None,
     ) -> UploadPage:
+        if self.api_key:
+            try:
+                return await self._fetch_upload_page_via_api(
+                    channel_id,
+                    max_results=max_results,
+                    page_token=page_token,
+                )
+            except httpx.HTTPStatusError as exc:
+                logger.warning(
+                    "YouTube Data API fetch failed for %s with %s; falling back to yt-dlp",
+                    channel_id,
+                    exc.response.status_code,
+                )
+            except Exception:
+                logger.exception("YouTube Data API fetch failed for %s; falling back to yt-dlp", channel_id)
+
+        return await asyncio.to_thread(
+            self._fetch_upload_page_via_ytdlp,
+            channel_id,
+            max_results=max_results,
+            page_token=page_token,
+        )
+
+    async def _fetch_upload_page_via_api(
+        self,
+        channel_id: str,
+        *,
+        max_results: int,
+        page_token: str | None = None,
+    ) -> UploadPage:
         if not self.api_key:
             return UploadPage(items=[], next_page_token=None)
 
@@ -65,6 +100,38 @@ class YouTubePoller:
                 items.append(item)
 
         return UploadPage(items=items, next_page_token=payload.get("nextPageToken"))
+
+    def _fetch_upload_page_via_ytdlp(
+        self,
+        channel_id: str,
+        *,
+        max_results: int,
+        page_token: str | None = None,
+    ) -> UploadPage:
+        try:
+            offset = max(0, int(page_token or "0"))
+        except ValueError:
+            offset = 0
+        start_index = offset + 1
+        payload = run_ytdlp_json(
+            [
+                "--playlist-start",
+                str(start_index),
+                "--playlist-end",
+                str(start_index + max_results - 1),
+                uploads_playlist_url(channel_id),
+            ]
+        )
+
+        items: list[SampleItem] = []
+        entries = payload.get("entries") or []
+        for raw in entries:
+            item = self._build_sample_item_from_ytdlp(channel_id, raw)
+            if item is not None:
+                items.append(item)
+
+        next_page_token = str(offset + len(entries)) if len(entries) == max_results else None
+        return UploadPage(items=items, next_page_token=next_page_token)
 
     def _build_sample_item(self, channel_id: str, raw: dict) -> SampleItem | None:
         video_id = raw.get("id", {}).get("videoId")
@@ -97,6 +164,46 @@ class YouTubePoller:
             download_state="not_downloaded",
             stream_state="idle",
         )
+
+    def _build_sample_item_from_ytdlp(self, channel_id: str, raw: dict) -> SampleItem | None:
+        video_id = raw.get("id")
+        published_at = self._published_at_from_ytdlp(raw)
+        if not video_id or published_at is None:
+            return None
+
+        description = raw.get("description") or ""
+        title = raw.get("title") or "Untitled sample"
+        genre_tags, tone_tags = self.tagger.classify(title, description)
+        return SampleItem(
+            id=f"sample-{video_id}",
+            youtube_video_id=video_id,
+            channel_id=channel_id,
+            channel_title=raw.get("channel") or raw.get("uploader"),
+            channel_handle=raw.get("uploader_id"),
+            channel_avatar_url=None,
+            title=title,
+            description_text=description,
+            published_at=published_at,
+            artwork_url=raw.get("thumbnail"),
+            duration_seconds=raw.get("duration"),
+            genre_tags=genre_tags,
+            tone_tags=tone_tags,
+            is_saved=False,
+            saved_at=None,
+            download_state="not_downloaded",
+            stream_state="idle",
+        )
+
+    def _published_at_from_ytdlp(self, raw: dict) -> datetime | None:
+        timestamp = raw.get("timestamp") or raw.get("release_timestamp")
+        if timestamp:
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
+        upload_date = raw.get("upload_date")
+        if upload_date:
+            return datetime.strptime(upload_date, "%Y%m%d").replace(tzinfo=timezone.utc)
+
+        return None
 
     async def backfill_channel(self, channel: Channel, *, limit: int) -> BackfillResult:
         inserted: list[SampleItem] = []
@@ -176,6 +283,11 @@ class YouTubePoller:
     async def poll_all(self, channels: list[Channel]) -> list[SampleItem]:
         inserted: list[SampleItem] = []
         for channel in channels:
-            if channel.is_tracked:
+            if not channel.is_tracked:
+                continue
+
+            try:
                 inserted.extend(await self.poll_channel(channel))
+            except Exception:
+                logger.exception("Polling failed for channel %s", channel.id)
         return inserted
