@@ -43,9 +43,7 @@ targets:
     platform: iOS
     sources:
       - path: Sources/DownloadActivityWidget
-        group: Sources/DownloadActivityWidget
       - path: Sources/DownloadActivityShared
-        group: Sources/DownloadActivityShared
     info:
       path: Sources/DownloadActivityWidget/Info.plist
       properties:
