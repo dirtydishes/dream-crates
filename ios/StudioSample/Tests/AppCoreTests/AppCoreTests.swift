@@ -2,6 +2,78 @@ import XCTest
 @testable import StudioSampleApp
 
 @MainActor
+private final class FakePlaybackEngine: PlaybackEngine {
+    struct LoadCall {
+        let sourceURL: URL
+        let startTime: Double
+        let settings: PlaybackSettings
+        let autoplay: Bool
+    }
+
+    var isPlaying = false
+    var currentTime: Double = 0
+    var duration: Double = 120
+    var hasItem = false
+    var currentURL: URL?
+    var onPlaybackEnded: (() -> Void)?
+    var onPlaybackFailed: (() -> Void)?
+
+    private(set) var loadCalls: [LoadCall] = []
+    private(set) var playCallCount = 0
+    private(set) var pauseCallCount = 0
+    private(set) var seekCalls: [Double] = []
+    private(set) var stopCallCount = 0
+    private(set) var updateCalls: [PlaybackSettings] = []
+
+    func load(sourceURL: URL, startTime: Double, settings: PlaybackSettings, autoplay: Bool) throws {
+        currentURL = sourceURL
+        currentTime = startTime
+        hasItem = true
+        isPlaying = autoplay
+        loadCalls.append(
+            LoadCall(
+                sourceURL: sourceURL,
+                startTime: startTime,
+                settings: settings,
+                autoplay: autoplay
+            )
+        )
+    }
+
+    func play() {
+        guard hasItem else { return }
+        isPlaying = true
+        playCallCount += 1
+    }
+
+    func pause() {
+        isPlaying = false
+        pauseCallCount += 1
+    }
+
+    func seek(to seconds: Double) {
+        currentTime = seconds
+        seekCalls.append(seconds)
+    }
+
+    func stop() {
+        isPlaying = false
+        hasItem = false
+        currentURL = nil
+        currentTime = 0
+        stopCallCount += 1
+    }
+
+    func update(settings: PlaybackSettings) {
+        updateCalls.append(settings)
+    }
+}
+
+private final class DownloadCounter: @unchecked Sendable {
+    var count = 0
+}
+
+@MainActor
 private final class FakeRepository: SampleRepository {
     struct OfflineError: Error {}
 
@@ -12,6 +84,7 @@ private final class FakeRepository: SampleRepository {
     var downloadURL = URL(string: "https://example.com/download.mp3")!
     var shouldFailUpdates = false
     var resolvePlaybackCalls = 0
+    var prepareDownloadCalls = 0
 
     init(items: [SampleItem], savedLibrary: [SampleItem]? = nil) {
         self.items = items
@@ -45,6 +118,7 @@ private final class FakeRepository: SampleRepository {
 
     func prepareDownload(sampleID: String) async throws -> URL {
         _ = sampleID
+        prepareDownloadCalls += 1
         return downloadURL
     }
 }
@@ -64,6 +138,14 @@ final class AppCoreTests: XCTestCase {
             .appendingPathComponent(testName)
         try? FileManager.default.removeItem(at: url)
         return DownloadManager(baseDirectory: url)
+    }
+
+    private func makePlaybackRoot(testName: String = #function) -> URL {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("DreamCratesTests")
+            .appendingPathComponent(testName)
+        try? FileManager.default.removeItem(at: url)
+        return url
     }
 
     private func makeSample(id: String, savedAt: Date?) -> SampleItem {
@@ -163,15 +245,19 @@ final class AppCoreTests: XCTestCase {
     }
 
     @MainActor
-    func testPlaybackSpeedPersistsAcrossStoreInstances() {
+    func testPlaybackPreferencesPersistAcrossStoreInstances() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
 
         let first = PlaybackPreferencesStore(userDefaults: defaults)
+        first.mode = .turntable
         first.speed = 1.75
+        first.transposeSemitones = 5
 
         let second = PlaybackPreferencesStore(userDefaults: defaults)
+        XCTAssertEqual(second.mode, .turntable)
         XCTAssertEqual(second.speed, 1.75)
+        XCTAssertEqual(second.transposeSemitones, 5)
     }
 
     @MainActor
@@ -200,6 +286,136 @@ final class AppCoreTests: XCTestCase {
         _ = try await store.resolvedPlaybackURL(for: sample.id)
 
         XCTAssertEqual(repository.resolvePlaybackCalls, 1)
+    }
+
+    @MainActor
+    func testWarpPlaybackUsesDownloadedFileFirst() async throws {
+        let sample = makeSample(id: "base", savedAt: nil)
+        let root = makePlaybackRoot()
+        let downloadsDir = root.appendingPathComponent("DreamCratesDownloads")
+        try FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
+        try Data("local".utf8).write(to: downloadsDir.appendingPathComponent("base.mp3"))
+
+        let downloadCounter = DownloadCounter()
+        let playbackCache = PlaybackCache(baseDirectory: root) { _ in
+            downloadCounter.count += 1
+            return root.appendingPathComponent("unused.mp3")
+        }
+
+        let repository = FakeRepository(items: [sample])
+        let store = SampleLibraryStore(
+            repository: repository,
+            downloadManager: DownloadManager(baseDirectory: root),
+            playbackCache: playbackCache,
+            localStateStore: LocalSampleStateStore(baseDirectory: root)
+        )
+        await store.load()
+
+        let resolved = try await store.preparePlaybackURL(for: sample.id, mode: .warp)
+
+        XCTAssertTrue(resolved.path.hasSuffix("DreamCratesDownloads/base.mp3"))
+        XCTAssertEqual(downloadCounter.count, 0)
+        XCTAssertEqual(repository.prepareDownloadCalls, 0)
+        XCTAssertEqual(store.samples.first?.downloadState, .downloaded)
+    }
+
+    @MainActor
+    func testWarpPlaybackCacheReusesTransientFile() async throws {
+        let sample = makeSample(id: "base", savedAt: nil)
+        let root = makePlaybackRoot()
+        let repository = FakeRepository(items: [sample])
+        let downloadCounter = DownloadCounter()
+
+        let playbackCache = PlaybackCache(baseDirectory: root) { _ in
+            downloadCounter.count += 1
+            let temporaryURL = root.appendingPathComponent("tmp-\(downloadCounter.count).mp3")
+            try Data("cached-\(downloadCounter.count)".utf8).write(to: temporaryURL)
+            return temporaryURL
+        }
+
+        let store = SampleLibraryStore(
+            repository: repository,
+            playbackCache: playbackCache,
+            localStateStore: LocalSampleStateStore(baseDirectory: root)
+        )
+        await store.load()
+
+        let first = try await store.preparePlaybackURL(for: sample.id, mode: .warp)
+        let second = try await store.preparePlaybackURL(for: sample.id, mode: .warp)
+
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(downloadCounter.count, 1)
+        XCTAssertEqual(repository.prepareDownloadCalls, 1)
+        XCTAssertEqual(repository.resolvePlaybackCalls, 0)
+        XCTAssertEqual(store.samples.first?.downloadState, .notDownloaded)
+    }
+
+    @MainActor
+    func testApplyingSpeedWhilePlayingUpdatesActiveEngineImmediately() {
+        let turntable = FakePlaybackEngine()
+        let warp = FakePlaybackEngine()
+        let controller = PlaybackController(turntableEngine: turntable, warpEngine: warp)
+        let sourceURL = URL(string: "https://example.com/sample.mp3")!
+
+        controller.play(
+            title: "Sample",
+            sourceURL: sourceURL,
+            settings: PlaybackSettings(mode: .turntable, speed: 1.0)
+        )
+        controller.applyPreferences(PlaybackSettings(mode: .turntable, speed: 1.5, transposeSemitones: 7))
+
+        XCTAssertEqual(turntable.loadCalls.count, 1)
+        XCTAssertEqual(turntable.updateCalls.last?.speed, 1.5)
+        XCTAssertEqual(turntable.updateCalls.last?.transposeSemitones, 0)
+        XCTAssertEqual(warp.loadCalls.count, 0)
+    }
+
+    @MainActor
+    func testPausedSpeedChangesApplyOnResume() {
+        let turntable = FakePlaybackEngine()
+        let warp = FakePlaybackEngine()
+        let controller = PlaybackController(turntableEngine: turntable, warpEngine: warp)
+        let sourceURL = URL(string: "https://example.com/sample.mp3")!
+
+        controller.play(
+            title: "Sample",
+            sourceURL: sourceURL,
+            settings: PlaybackSettings(mode: .turntable, speed: 1.0)
+        )
+        controller.pause()
+        controller.applyPreferences(PlaybackSettings(mode: .turntable, speed: 1.75))
+        controller.resume()
+
+        XCTAssertEqual(turntable.pauseCallCount, 1)
+        XCTAssertEqual(turntable.updateCalls.last?.speed, 1.75)
+        XCTAssertEqual(turntable.playCallCount, 1)
+    }
+
+    @MainActor
+    func testModeSwitchChoosesWarpEngineAndPreservesStartTime() {
+        let turntable = FakePlaybackEngine()
+        let warp = FakePlaybackEngine()
+        let controller = PlaybackController(turntableEngine: turntable, warpEngine: warp)
+        let streamURL = URL(string: "https://example.com/sample.mp3")!
+        let localURL = URL(fileURLWithPath: "/tmp/sample.mp3")
+
+        controller.play(
+            title: "Sample",
+            sourceURL: streamURL,
+            settings: PlaybackSettings(mode: .turntable, speed: 1.0)
+        )
+        turntable.currentTime = 18.5
+        controller.play(
+            title: "Sample",
+            sourceURL: localURL,
+            settings: PlaybackSettings(mode: .warp, speed: 0.9, transposeSemitones: -3),
+            startTime: 18.5
+        )
+
+        XCTAssertEqual(turntable.stopCallCount, 1)
+        XCTAssertEqual(warp.loadCalls.count, 1)
+        XCTAssertEqual(warp.loadCalls.last?.startTime, 18.5)
+        XCTAssertEqual(warp.loadCalls.last?.settings.transposeSemitones, -3)
     }
 
     func testBackendFeedPayloadDecodesWithSnakeCaseFields() throws {

@@ -102,12 +102,15 @@ struct FeedView: View {
         }
 
         do {
-            let sourceURL = try await store.resolvedPlaybackURL(for: item.id)
+            let sourceURL = try await store.preparePlaybackURL(
+                for: item.id,
+                mode: playbackPreferences.mode
+            )
             playback.configureIfNeeded()
             playback.play(
                 title: item.title,
                 sourceURL: sourceURL,
-                rate: Float(playbackPreferences.speed)
+                settings: playbackPreferences.currentSettings
             )
         } catch {
             playback.stopAndReset()

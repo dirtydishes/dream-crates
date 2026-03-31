@@ -13,6 +13,7 @@ final class SampleLibraryStore: ObservableObject {
 
     private let repository: SampleRepository
     private let downloadManager: DownloadManager
+    private let playbackCache: PlaybackCache
     private let localStateStore: LocalSampleStateStore
     private var localFiles: [String: URL] = [:]
     private var cachedPlaybackURLs: [String: CachedPlaybackURL] = [:]
@@ -22,10 +23,12 @@ final class SampleLibraryStore: ObservableObject {
     init(
         repository: SampleRepository,
         downloadManager: DownloadManager = DownloadManager(),
+        playbackCache: PlaybackCache = PlaybackCache(),
         localStateStore: LocalSampleStateStore = LocalSampleStateStore()
     ) {
         self.repository = repository
         self.downloadManager = downloadManager
+        self.playbackCache = playbackCache
         self.localStateStore = localStateStore
     }
 
@@ -128,6 +131,22 @@ final class SampleLibraryStore: ObservableObject {
         let resolved = try await repository.resolvePlayback(sampleID: sampleID)
         cachedPlaybackURLs[sampleID] = CachedPlaybackURL(url: resolved, cachedAt: .now)
         return resolved
+    }
+
+    func preparePlaybackURL(for sampleID: String, mode: PlaybackMode) async throws -> URL {
+        switch mode {
+        case .turntable:
+            return try await resolvedPlaybackURL(for: sampleID)
+        case .warp:
+            if let local = localFiles[sampleID] {
+                return local
+            }
+            if let cached = try await playbackCache.cachedURL(for: sampleID) {
+                return cached
+            }
+            let downloadURL = try await repository.prepareDownload(sampleID: sampleID)
+            return try await playbackCache.cache(sampleID: sampleID, from: downloadURL)
+        }
     }
 
     func preloadPlayback(sampleID: String) async {
