@@ -5,7 +5,13 @@ import argparse
 import json
 import sys
 
-from app.services.ytdlp import pick_media_headers, pick_media_url, run_ytdlp_json
+from app.services.ytdlp import (
+    download_format_selector,
+    pick_media_headers,
+    pick_media_url,
+    run_ytdlp_json,
+    stream_format_selector,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -18,7 +24,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     source_url = f"https://www.youtube.com/watch?v={args.video_id}"
-    format_selector = "bestaudio[ext=m4a]/bestaudio/best" if args.mode == "stream" else "bestaudio/best"
+    format_selector = stream_format_selector() if args.mode == "stream" else download_format_selector()
 
     try:
         payload = run_ytdlp_json(

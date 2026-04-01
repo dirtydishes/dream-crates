@@ -8,7 +8,7 @@ final class SampleLibraryStore: ObservableObject {
         let cachedAt: Date
     }
 
-    private enum LocalAudioAssetError: Error {
+    private enum LocalAudioAssetError: Error, Equatable {
         case invalidFile
     }
 
@@ -16,6 +16,8 @@ final class SampleLibraryStore: ObservableObject {
     @Published var currentSampleID: String?
     @Published var isLoading = false
     @Published private(set) var downloadProgress: [String: Double] = [:]
+    @Published private(set) var downloadRuntime: [String: DownloadRuntimeSnapshot] = [:]
+    @Published private(set) var downloadLogs: [String: [DownloadLogEntry]] = [:]
 
     private let repository: SampleRepository
     private let downloadManager: DownloadManager
@@ -26,6 +28,9 @@ final class SampleLibraryStore: ObservableObject {
     private var cachedPlaybackURLs: [String: CachedPlaybackURL] = [:]
     private var preloadingPlaybackIDs = Set<String>()
     private let playbackCacheLifetime: TimeInterval = 15 * 60
+    private let maxDownloadLogEntriesPerSample = 80
+    private var lastLoggedProgressDecile: [String: Int] = [:]
+    private var liveActivityDiagnosticCache: [String: Set<String>] = [:]
 
     init(
         repository: SampleRepository,
@@ -52,6 +57,28 @@ final class SampleLibraryStore: ObservableObject {
             .sorted { (lhs, rhs) in
                 (lhs.savedAt ?? .distantPast) > (rhs.savedAt ?? .distantPast)
             }
+    }
+
+    var activeDownloads: [DownloadRuntimeSnapshot] {
+        downloadRuntime.values
+            .filter { $0.state == .queued || $0.state == .downloading }
+            .sorted { $0.startedAt < $1.startedAt }
+    }
+
+    var hasActiveDownloads: Bool {
+        !activeDownloads.isEmpty
+    }
+
+    var recentDownloadLogEntries: [DownloadLogEntry] {
+        downloadLogs.values
+            .flatMap { $0 }
+            .sorted { $0.timestamp > $1.timestamp }
+    }
+
+    func downloadTitle(for sampleID: String) -> String {
+        downloadRuntime[sampleID]?.title
+            ?? sample(for: sampleID)?.title
+            ?? "Unknown Sample"
     }
 
     func load() async {
@@ -119,20 +146,39 @@ final class SampleLibraryStore: ObservableObject {
 
         setDownloadState(.queued, for: sampleID)
         downloadProgress[sampleID] = 0
+        beginDownloadRuntime(for: currentSample, state: .queued, statusText: "Queued", progress: 0)
+        appendDownloadLog("Queued for offline download.", level: .info, sampleID: sampleID)
         if let sample = sample(for: sampleID) {
-            await downloadLiveActivityManager.update(sample: sample, statusText: "Queued", progress: 0)
+            let outcome = await downloadLiveActivityManager.update(sample: sample, statusText: "Queued", progress: 0)
+            handleLiveActivityOutcome(outcome, sampleID: sampleID, stage: "queue", includeSuccess: true)
         }
 
         do {
             let sourceURL = try await repository.prepareDownload(sampleID: sampleID)
+            appendDownloadLog(
+                "Prepared download URL via \(redactedURLString(sourceURL)).",
+                level: .info,
+                sampleID: sampleID
+            )
             setDownloadState(.downloading, for: sampleID)
+            updateDownloadRuntime(for: sampleID, state: .downloading, statusText: "Downloading", progress: 0)
             if let sample = sample(for: sampleID) {
-                await downloadLiveActivityManager.update(sample: sample, statusText: "Downloading", progress: 0)
+                let outcome = await downloadLiveActivityManager.update(sample: sample, statusText: "Downloading", progress: 0)
+                handleLiveActivityOutcome(outcome, sampleID: sampleID, stage: "start", includeSuccess: true)
             }
-            let localURL = try await downloadManager.download(sampleID: sampleID, from: sourceURL) { [weak self] progress in
-                guard let self else { return }
-                await self.handleDownloadProgress(sampleID: sampleID, progress: progress)
-            }
+            let localURL = try await downloadManager.download(
+                sampleID: sampleID,
+                from: sourceURL,
+                onProgress: { [weak self] progress in
+                    guard let self else { return }
+                    await self.handleDownloadProgress(sampleID: sampleID, progress: progress)
+                },
+                onEvent: { [weak self] event in
+                    guard let self else { return }
+                    await self.handleDownloadTransportEvent(event, sampleID: sampleID)
+                }
+            )
+            appendDownloadLog("Validating downloaded audio asset.", level: .info, sampleID: sampleID)
             guard await isUsableLocalAudioAsset(at: localURL, sampleID: sampleID) else {
                 try await downloadManager.removeDownload(sampleID: sampleID)
                 throw LocalAudioAssetError.invalidFile
@@ -140,12 +186,26 @@ final class SampleLibraryStore: ObservableObject {
             localFiles[sampleID] = localURL
             downloadProgress.removeValue(forKey: sampleID)
             setDownloadState(.downloaded, for: sampleID)
-            await downloadLiveActivityManager.end(sampleID: sampleID, finalStatusText: "Download complete", progress: 1)
+            updateDownloadRuntime(for: sampleID, state: .downloaded, statusText: "Download complete", progress: 1)
+            appendDownloadLog("Download finished and passed local validation.", level: .info, sampleID: sampleID)
+            let outcome = await downloadLiveActivityManager.end(
+                sampleID: sampleID,
+                finalStatusText: "Download complete",
+                progress: 1
+            )
+            handleLiveActivityOutcome(outcome, sampleID: sampleID, stage: "complete")
         } catch {
             localFiles.removeValue(forKey: sampleID)
             downloadProgress.removeValue(forKey: sampleID)
             setDownloadState(.failed, for: sampleID)
-            await downloadLiveActivityManager.end(sampleID: sampleID, finalStatusText: "Download failed", progress: nil)
+            updateDownloadRuntime(for: sampleID, state: .failed, statusText: "Download failed", progress: nil)
+            appendDownloadLog(describeDownloadError(error), level: .error, sampleID: sampleID)
+            let outcome = await downloadLiveActivityManager.end(
+                sampleID: sampleID,
+                finalStatusText: "Download failed",
+                progress: downloadRuntime[sampleID]?.progress
+            )
+            handleLiveActivityOutcome(outcome, sampleID: sampleID, stage: "failure")
         }
     }
 
@@ -167,12 +227,15 @@ final class SampleLibraryStore: ObservableObject {
         try? await playbackCache.removeCachedURL(for: sampleID)
         localFiles.removeValue(forKey: sampleID)
         downloadProgress.removeValue(forKey: sampleID)
-        await downloadLiveActivityManager.end(
+        appendDownloadLog("Removed the local download.", level: .info, sampleID: sampleID)
+        updateDownloadRuntime(for: sampleID, state: .notDownloaded, statusText: "Download removed", progress: nil)
+        let outcome = await downloadLiveActivityManager.end(
             sampleID: sampleID,
             finalStatusText: "Download removed",
             progress: nil,
             dismissalPolicy: .immediate
         )
+        handleLiveActivityOutcome(outcome, sampleID: sampleID, stage: "remove")
 
         setDownloadState(.notDownloaded, for: sampleID)
     }
@@ -369,19 +432,206 @@ final class SampleLibraryStore: ObservableObject {
 
     private func handleDownloadProgress(sampleID: String, progress: Double) async {
         downloadProgress[sampleID] = progress
+        updateDownloadRuntime(
+            for: sampleID,
+            state: .downloading,
+            statusText: progress >= 0.995 ? "Finishing" : "Downloading",
+            progress: progress
+        )
+        logProgressIfNeeded(sampleID: sampleID, progress: progress)
         guard let sample = sample(for: sampleID) else { return }
-        await downloadLiveActivityManager.update(
+        let outcome = await downloadLiveActivityManager.update(
             sample: sample,
             statusText: progress >= 0.995 ? "Finishing" : "Downloading",
             progress: progress
         )
+        handleLiveActivityOutcome(outcome, sampleID: sampleID, stage: "progress")
     }
 
     private func invalidateDownloadedAsset(for sampleID: String) async {
         try? await downloadManager.removeDownload(sampleID: sampleID)
         localFiles.removeValue(forKey: sampleID)
         downloadProgress.removeValue(forKey: sampleID)
+        appendDownloadLog("Discarded an invalid local audio file.", level: .warning, sampleID: sampleID)
+        updateDownloadRuntime(for: sampleID, state: .notDownloaded, statusText: "Removed invalid file", progress: nil)
         setDownloadState(.notDownloaded, for: sampleID)
+    }
+
+    private func beginDownloadRuntime(
+        for sample: SampleItem,
+        state: DownloadState,
+        statusText: String,
+        progress: Double?
+    ) {
+        lastLoggedProgressDecile.removeValue(forKey: sample.id)
+        liveActivityDiagnosticCache.removeValue(forKey: sample.id)
+        let now = Date()
+        let startedAt = downloadRuntime[sample.id]?.startedAt ?? now
+        downloadRuntime[sample.id] = DownloadRuntimeSnapshot(
+            id: sample.id,
+            title: sample.title,
+            uploaderName: sample.uploaderName,
+            uploaderAvatarURL: sample.channelAvatarURL,
+            statusText: statusText,
+            progress: progress,
+            state: state,
+            startedAt: startedAt,
+            updatedAt: now
+        )
+    }
+
+    private func updateDownloadRuntime(
+        for sampleID: String,
+        state: DownloadState,
+        statusText: String,
+        progress: Double?
+    ) {
+        guard let sample = sample(for: sampleID) ?? sampleSnapshot(for: sampleID) else { return }
+        let now = Date()
+        let startedAt = downloadRuntime[sampleID]?.startedAt ?? now
+        downloadRuntime[sampleID] = DownloadRuntimeSnapshot(
+            id: sampleID,
+            title: sample.title,
+            uploaderName: sample.uploaderName,
+            uploaderAvatarURL: sample.channelAvatarURL,
+            statusText: statusText,
+            progress: progress,
+            state: state,
+            startedAt: startedAt,
+            updatedAt: now
+        )
+
+        if state == .notDownloaded {
+            lastLoggedProgressDecile.removeValue(forKey: sampleID)
+            liveActivityDiagnosticCache.removeValue(forKey: sampleID)
+        }
+    }
+
+    private func sampleSnapshot(for sampleID: String) -> SampleItem? {
+        guard let runtime = downloadRuntime[sampleID] else { return nil }
+        return SampleItem(
+            id: sampleID,
+            youtubeVideoId: sampleID,
+            channelId: sampleID,
+            channelTitle: runtime.uploaderName,
+            channelHandle: nil,
+            channelAvatarURL: runtime.uploaderAvatarURL,
+            title: runtime.title,
+            descriptionText: "",
+            publishedAt: .now,
+            artworkURL: nil,
+            durationSeconds: nil,
+            genreTags: [],
+            toneTags: [],
+            isSaved: false,
+            savedAt: nil,
+            downloadState: runtime.state,
+            streamState: .idle
+        )
+    }
+
+    private func appendDownloadLog(_ message: String, level: DownloadLogLevel, sampleID: String) {
+        var entries = downloadLogs[sampleID] ?? []
+        entries.append(DownloadLogEntry(sampleID: sampleID, level: level, message: message))
+        if entries.count > maxDownloadLogEntriesPerSample {
+            entries.removeFirst(entries.count - maxDownloadLogEntriesPerSample)
+        }
+        downloadLogs[sampleID] = entries
+    }
+
+    private func logProgressIfNeeded(sampleID: String, progress: Double) {
+        guard progress.isFinite else { return }
+        let normalized = min(max(progress, 0), 1)
+        let decile = min(10, Int((normalized * 100).rounded(.down)) / 10)
+        guard lastLoggedProgressDecile[sampleID] != decile else { return }
+        lastLoggedProgressDecile[sampleID] = decile
+
+        if decile == 10 {
+            appendDownloadLog("Transfer reached 100%. Finalizing file.", level: .info, sampleID: sampleID)
+        } else if decile > 0 {
+            appendDownloadLog("Transfer reached \(decile * 10)% progress.", level: .info, sampleID: sampleID)
+        }
+    }
+
+    private func handleDownloadTransportEvent(_ event: DownloadTransportEvent, sampleID: String) async {
+        appendDownloadLog(event.message, level: event.level, sampleID: sampleID)
+    }
+
+    private func handleLiveActivityOutcome(
+        _ outcome: DownloadLiveActivityManager.UpdateOutcome,
+        sampleID: String,
+        stage: String,
+        includeSuccess: Bool = false
+    ) {
+        switch outcome {
+        case .created where includeSuccess:
+            appendLiveActivityLogIfNeeded(
+                "live-activity-\(stage)-created",
+                message: "Started a Live Activity for this download.",
+                level: .info,
+                sampleID: sampleID
+            )
+        case .updated where includeSuccess:
+            appendLiveActivityLogIfNeeded(
+                "live-activity-\(stage)-updated",
+                message: "Updated the Live Activity.",
+                level: .info,
+                sampleID: sampleID
+            )
+        case .ended where includeSuccess:
+            appendLiveActivityLogIfNeeded(
+                "live-activity-\(stage)-ended",
+                message: "Ended the Live Activity.",
+                level: .info,
+                sampleID: sampleID
+            )
+        case .disabled:
+            appendLiveActivityLogIfNeeded(
+                "live-activity-disabled",
+                message: "Live Activities are disabled or unavailable on this device.",
+                level: .warning,
+                sampleID: sampleID
+            )
+        case let .failed(reason):
+            appendLiveActivityLogIfNeeded(
+                "live-activity-failed-\(stage)",
+                message: "Live Activity update failed: \(reason)",
+                level: .warning,
+                sampleID: sampleID
+            )
+        case .ended, .updated, .created, .notFound:
+            break
+        }
+    }
+
+    private func appendLiveActivityLogIfNeeded(
+        _ key: String,
+        message: String,
+        level: DownloadLogLevel,
+        sampleID: String
+    ) {
+        var keys = liveActivityDiagnosticCache[sampleID] ?? []
+        guard keys.insert(key).inserted else { return }
+        liveActivityDiagnosticCache[sampleID] = keys
+        appendDownloadLog(message, level: level, sampleID: sampleID)
+    }
+
+    private func describeDownloadError(_ error: Error) -> String {
+        if let error = error as? LocalAudioAssetError, error == .invalidFile {
+            return "The downloaded file could not be validated as playable local audio."
+        }
+        if let localized = error as? LocalizedError, let description = localized.errorDescription, !description.isEmpty {
+            return description
+        }
+        return error.localizedDescription
+    }
+
+    private func redactedURLString(_ url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
+        }
+        components.query = nil
+        return components.string ?? url.absoluteString
     }
 
     private func isUsableLocalAudioAsset(at url: URL, sampleID: String) async -> Bool {
@@ -390,6 +640,7 @@ final class SampleLibraryStore: ObservableObject {
               let fileSize = resourceValues?.fileSize,
               fileSize > 1_024
         else {
+            appendDownloadLog("Downloaded file was missing or too small to validate.", level: .warning, sampleID: sampleID)
             return false
         }
 
@@ -402,18 +653,25 @@ final class SampleLibraryStore: ObservableObject {
             let loadedDuration = try await asset.load(.duration)
             let duration = loadedDuration.seconds
             guard duration.isFinite, duration > 0 else {
+                appendDownloadLog("Downloaded file did not expose a usable duration.", level: .warning, sampleID: sampleID)
                 return false
             }
 
             if let expectedDuration = expectedDuration(for: sampleID), expectedDuration > 0 {
                 let tolerance = max(3, expectedDuration * 0.25)
                 guard abs(duration - expectedDuration) <= tolerance else {
+                    appendDownloadLog(
+                        "Downloaded file duration \(Int(duration.rounded()))s did not match the expected \(Int(expectedDuration.rounded()))s.",
+                        level: .warning,
+                        sampleID: sampleID
+                    )
                     return false
                 }
             }
 
             return true
         } catch {
+            appendDownloadLog("AVFoundation could not open the downloaded audio: \(error.localizedDescription)", level: .warning, sampleID: sampleID)
             return false
         }
     }

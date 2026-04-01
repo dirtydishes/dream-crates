@@ -139,6 +139,72 @@ def test_media_proxy_streams_upstream_audio(monkeypatch):
     assert captured_headers["user-agent"] == "yt-dlp-test"
 
 
+def test_media_proxy_download_sets_filename_from_content_type(monkeypatch):
+    main_mod.store.upsert_samples(
+        [
+            SampleItem(
+                id="sample-download-proxy",
+                youtube_video_id="yt-download-proxy",
+                channel_id="channel-1",
+                title="Fresh sample",
+                description_text="",
+                published_at=datetime.now(timezone.utc),
+                genre_tags=[],
+                tone_tags=[],
+                is_saved=False,
+                saved_at=None,
+                download_state="not_downloaded",
+                stream_state="idle",
+            )
+        ]
+    )
+
+    class FakeResolver:
+        def resolve_stream(self, sample):
+            _ = sample
+            raise AssertionError("stream mode should not be used")
+
+        def resolve_download(self, sample):
+            _ = sample
+            return ResolveResult(
+                url="https://media.example/audio.webm",
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+                source="yt-dlp",
+                headers={},
+            )
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            _ = args
+            _ = kwargs
+
+        def build_request(self, method, url, headers=None):
+            return httpx.Request(method, url, headers=headers)
+
+        async def send(self, request, stream=False):
+            _ = stream
+            return httpx.Response(
+                200,
+                headers={
+                    "Content-Length": "3",
+                    "Content-Type": "audio/webm",
+                },
+                content=b"abc",
+                request=request,
+            )
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(main_mod, "resolver", FakeResolver())
+    monkeypatch.setattr(main_mod.httpx, "AsyncClient", FakeAsyncClient)
+
+    response = client.get("/v1/media/sample-download-proxy/download")
+
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == 'attachment; filename="sample-download-proxy.webm"'
+
+
 def test_register_device_and_update_preferences():
     reg = client.post(
         "/v1/devices/register",

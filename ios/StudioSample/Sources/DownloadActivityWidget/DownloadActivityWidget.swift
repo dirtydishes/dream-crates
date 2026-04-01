@@ -26,7 +26,7 @@ struct DownloadActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    DownloadActivityArtwork(context: context, size: 52)
+                    DownloadActivityAvatar(context: context, size: 52)
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
@@ -53,18 +53,21 @@ struct DownloadActivityWidget: Widget {
                         .padding(.top, 4)
                 }
             } compactLeading: {
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(DownloadActivityTheme.accent)
+                DownloadActivityAvatar(context: context, size: 24)
             } compactTrailing: {
                 DownloadActivityCompactTrailing(context: context)
             } minimal: {
                 ZStack {
-                    Circle()
-                        .fill(DownloadActivityTheme.panel)
+                    DownloadActivityAvatar(context: context, size: 28)
 
-                    Image(systemName: context.state.isFinished ? "checkmark" : "arrow.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(context.state.isFinished ? DownloadActivityTheme.label : DownloadActivityTheme.accent)
+                    if context.state.isFinished {
+                        Circle()
+                            .fill(Color.black.opacity(0.38))
+
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(DownloadActivityTheme.label)
+                    }
                 }
             }
             .keylineTint(DownloadActivityTheme.accent)
@@ -77,7 +80,7 @@ private struct DownloadActivityLockScreenView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            DownloadActivityArtwork(context: context, size: 56)
+            DownloadActivityAvatar(context: context, size: 56)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(context.attributes.title)
@@ -146,15 +149,15 @@ private struct DownloadActivityProgress: View {
     }
 }
 
-private struct DownloadActivityArtwork: View {
+private struct DownloadActivityAvatar: View {
     let context: ActivityViewContext<DownloadLiveActivityAttributes>
     let size: CGFloat
 
     var body: some View {
         Group {
-            if let artworkURLString = context.attributes.artworkURLString,
-               let artworkURL = URL(string: artworkURLString) {
-                AsyncImage(url: artworkURL) { image in
+            if let imageURLString = context.attributes.uploaderImageURLString,
+               let imageURL = URL(string: imageURLString) {
+                AsyncImage(url: imageURL) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -166,9 +169,9 @@ private struct DownloadActivityArtwork: View {
             }
         }
         .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+        .clipShape(Circle())
         .overlay(
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+            Circle()
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
     }
@@ -181,8 +184,8 @@ private struct DownloadActivityArtwork: View {
                 endPoint: .bottomTrailing
             )
 
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: size * 0.42, weight: .semibold))
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: size * 0.46, weight: .semibold))
                 .foregroundStyle(Color.black.opacity(0.72))
         }
     }

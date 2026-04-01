@@ -3,12 +3,23 @@ import Foundation
 
 @MainActor
 final class DownloadLiveActivityManager {
+    enum UpdateOutcome: Equatable {
+        case created
+        case updated
+        case ended
+        case disabled
+        case failed(String)
+        case notFound
+    }
+
     static let shared = DownloadLiveActivityManager()
 
     private var activitiesBySampleID: [String: Activity<DownloadLiveActivityAttributes>] = [:]
 
-    func update(sample: SampleItem, statusText: String, progress: Double?, isFinished: Bool = false) async {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+    func update(sample: SampleItem, statusText: String, progress: Double?, isFinished: Bool = false) async -> UpdateOutcome {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            return .disabled
+        }
 
         let contentState = DownloadLiveActivityAttributes.ContentState(
             statusText: statusText,
@@ -20,14 +31,14 @@ final class DownloadLiveActivityManager {
             ?? Activity<DownloadLiveActivityAttributes>.activities.first(where: { $0.attributes.sampleID == sample.id }) {
             activitiesBySampleID[sample.id] = existing
             await existing.update(ActivityContent(state: contentState, staleDate: nil))
-            return
+            return .updated
         }
 
         let attributes = DownloadLiveActivityAttributes(
             sampleID: sample.id,
             title: sample.title,
             uploaderName: sample.uploaderName,
-            artworkURLString: sample.artworkURL?.absoluteString
+            uploaderImageURLString: sample.channelAvatarURL?.absoluteString ?? sample.artworkURL?.absoluteString
         )
 
         do {
@@ -37,16 +48,22 @@ final class DownloadLiveActivityManager {
                 pushType: nil
             )
             activitiesBySampleID[sample.id] = activity
+            return .created
         } catch {
-            // Keep downloads functional even if the live activity request fails.
+            return .failed(error.localizedDescription)
         }
     }
 
-    func end(sampleID: String, finalStatusText: String, progress: Double?, dismissalPolicy: ActivityUIDismissalPolicy = .default) async {
+    func end(
+        sampleID: String,
+        finalStatusText: String,
+        progress: Double?,
+        dismissalPolicy: ActivityUIDismissalPolicy = .default
+    ) async -> UpdateOutcome {
         let activity = activitiesBySampleID[sampleID] ?? Activity<DownloadLiveActivityAttributes>.activities.first {
             $0.attributes.sampleID == sampleID
         }
-        guard let activity else { return }
+        guard let activity else { return .notFound }
 
         let finalState = DownloadLiveActivityAttributes.ContentState(
             statusText: finalStatusText,
@@ -59,5 +76,6 @@ final class DownloadLiveActivityManager {
             dismissalPolicy: dismissalPolicy
         )
         activitiesBySampleID.removeValue(forKey: sampleID)
+        return .ended
     }
 }

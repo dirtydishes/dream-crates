@@ -5,6 +5,14 @@ from subprocess import CompletedProcess, run
 from typing import Any
 
 
+def stream_format_selector() -> str:
+    return "bestaudio[ext=m4a]/bestaudio[acodec*=mp4a]/bestaudio[ext=mp4]/best[ext=mp4]/bestaudio/best"
+
+
+def download_format_selector() -> str:
+    return "bestaudio[ext=m4a]/bestaudio[acodec*=mp4a]/bestaudio[ext=mp4]/best[ext=mp4]"
+
+
 def run_ytdlp_json(args: list[str]) -> dict[str, Any]:
     completed: CompletedProcess[str] = run(
         [

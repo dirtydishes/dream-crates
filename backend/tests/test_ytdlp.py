@@ -1,4 +1,10 @@
-from app.services.ytdlp import pick_media_headers, pick_media_url, uploads_playlist_url
+from app.services.ytdlp import (
+    download_format_selector,
+    pick_media_headers,
+    pick_media_url,
+    stream_format_selector,
+    uploads_playlist_url,
+)
 
 
 def test_pick_media_url_prefers_requested_audio_format():
@@ -67,3 +73,19 @@ def test_pick_media_headers_uses_selected_format_headers():
 
 def test_uploads_playlist_url_uses_uploads_playlist_for_channel_ids():
     assert uploads_playlist_url("UCabc123") == "https://www.youtube.com/playlist?list=UUabc123"
+
+
+def test_stream_format_selector_prefers_m4a_but_keeps_broad_fallbacks():
+    selector = stream_format_selector()
+
+    assert "bestaudio[ext=m4a]" in selector
+    assert selector.endswith("/bestaudio/best")
+
+
+def test_download_format_selector_requires_ios_playable_container():
+    selector = download_format_selector()
+
+    assert "bestaudio[ext=m4a]" in selector
+    assert "acodec*=mp4a" in selector
+    assert "webm" not in selector
+    assert "/bestaudio/best" not in selector

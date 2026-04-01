@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import logging
+import mimetypes
 
 import httpx
 from fastapi import Body, FastAPI, HTTPException, Request, Response
@@ -214,7 +215,7 @@ async def media_proxy(sample_id: str, mode: str, request: Request):
 
     proxy_headers = _filter_proxy_headers(upstream_response.headers)
     if mode == "download" and "content-disposition" not in {name.lower() for name in proxy_headers}:
-        proxy_headers["Content-Disposition"] = f'attachment; filename="{sample_id}.m4a"'
+        proxy_headers["Content-Disposition"] = f'attachment; filename="{_download_filename(sample_id, upstream_response.headers.get("content-type"))}"'
 
     cleanup = BackgroundTask(_close_upstream_response, upstream_response, client)
     if request.method == "HEAD":
@@ -283,6 +284,33 @@ def _filter_proxy_headers(headers: httpx.Headers) -> dict[str, str]:
         for key, value in headers.items()
         if key.lower() not in hop_by_hop
     }
+
+
+def _download_filename(sample_id: str, content_type: str | None) -> str:
+    ext = _extension_for_content_type(content_type)
+    return f"{sample_id}.{ext}" if ext else sample_id
+
+
+def _extension_for_content_type(content_type: str | None) -> str:
+    if not content_type:
+        return "m4a"
+
+    normalized = content_type.split(";", maxsplit=1)[0].strip().lower()
+    custom_map = {
+        "audio/mp4": "m4a",
+        "video/mp4": "m4a",
+        "audio/webm": "webm",
+        "video/webm": "webm",
+        "audio/x-wav": "wav",
+    }
+    if normalized in custom_map:
+        return custom_map[normalized]
+
+    guessed = mimetypes.guess_extension(normalized)
+    if not guessed:
+        return "m4a"
+
+    return guessed.removeprefix(".")
 
 
 def _public_url_for(request: Request, route_name: str, **path_params: str) -> str:

@@ -11,5 +11,5 @@ struct DownloadLiveActivityAttributes: ActivityAttributes {
     var sampleID: String
     var title: String
     var uploaderName: String
-    var artworkURLString: String?
+    var uploaderImageURLString: String?
 }

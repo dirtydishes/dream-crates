@@ -141,12 +141,15 @@ final class AppCoreTests: XCTestCase {
         return LocalSampleStateStore(baseDirectory: url)
     }
 
-    private func makeDownloadManager(testName: String = #function) -> DownloadManager {
+    private func makeDownloadManager(
+        testName: String = #function,
+        downloadOperation: DownloadManager.DownloadOperation? = nil
+    ) -> DownloadManager {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("DreamCratesTests")
             .appendingPathComponent(testName)
         try? FileManager.default.removeItem(at: url)
-        return DownloadManager(baseDirectory: url)
+        return DownloadManager(baseDirectory: url, downloadOperation: downloadOperation)
     }
 
     private func makePlaybackRoot(testName: String = #function) -> URL {
@@ -292,6 +295,152 @@ final class AppCoreTests: XCTestCase {
         XCTAssertEqual(store.samples.first?.downloadState, .downloaded)
         let resolved = try await store.resolvedPlaybackURL(for: "base")
         XCTAssertTrue(resolved.path.hasSuffix("base/base.wav"))
+    }
+
+    @MainActor
+    func testDownloadManagerPrefersMimeTypeExtensionOverSuggestedFilename() async throws {
+        let fileManager = FileManager.default
+        let tempRoot = makePlaybackRoot()
+        let tempDownload = tempRoot.appendingPathComponent("transport.tmp")
+        try writeAudioFixture(to: tempDownload, durationSeconds: 2)
+
+        let manager = DownloadManager(
+            baseDirectory: tempRoot,
+            downloadOperation: { sourceURL, onProgress in
+                _ = sourceURL
+                await onProgress?(0.5)
+                let response = HTTPURLResponse(
+                    url: URL(string: "https://example.com/download")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "Content-Type": "audio/wav",
+                        "Content-Disposition": "attachment; filename=\"sample.m4a\"",
+                    ]
+                )!
+                return (tempDownload, response)
+            }
+        )
+
+        let destination = try await manager.download(
+            sampleID: "mime-test",
+            from: URL(string: "https://example.com/download")!
+        )
+
+        XCTAssertTrue(fileManager.fileExists(atPath: destination.path()))
+        XCTAssertEqual(destination.pathExtension, "wav")
+    }
+
+    @MainActor
+    func testDownloadManagerThrowsHelpfulHTTPError() async {
+        let tempRoot = makePlaybackRoot()
+        let tempDownload = tempRoot.appendingPathComponent("error.html")
+        try? FileManager.default.createDirectory(at: tempDownload.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("<html>forbidden</html>".utf8).write(to: tempDownload)
+
+        let manager = DownloadManager(
+            baseDirectory: tempRoot,
+            downloadOperation: { sourceURL, onProgress in
+                _ = sourceURL
+                _ = onProgress
+                let response = HTTPURLResponse(
+                    url: URL(string: "https://example.com/download")!,
+                    statusCode: 403,
+                    httpVersion: nil,
+                    headerFields: [
+                        "Content-Type": "text/html",
+                    ]
+                )!
+                return (tempDownload, response)
+            }
+        )
+
+        do {
+            _ = try await manager.download(
+                sampleID: "http-error",
+                from: URL(string: "https://example.com/download")!
+            )
+            XCTFail("Expected download to fail")
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertTrue(message.contains("HTTP 403"))
+            XCTAssertTrue(message.contains("forbidden"))
+        }
+    }
+
+    @MainActor
+    func testDownloadManagerRejectsUnsupportedOfflineMediaType() async {
+        let tempRoot = makePlaybackRoot()
+        let tempDownload = tempRoot.appendingPathComponent("audio.webm")
+        try? FileManager.default.createDirectory(at: tempDownload.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("webm".utf8).write(to: tempDownload)
+
+        let manager = DownloadManager(
+            baseDirectory: tempRoot,
+            downloadOperation: { sourceURL, onProgress in
+                _ = sourceURL
+                _ = onProgress
+                let response = HTTPURLResponse(
+                    url: URL(string: "https://example.com/download")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "Content-Type": "audio/webm",
+                    ]
+                )!
+                return (tempDownload, response)
+            }
+        )
+
+        do {
+            _ = try await manager.download(
+                sampleID: "webm-error",
+                from: URL(string: "https://example.com/download")!
+            )
+            XCTFail("Expected download to fail")
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertTrue(message.contains("audio/webm"))
+            XCTAssertTrue(message.contains("offline playback"))
+        }
+    }
+
+    @MainActor
+    func testDownloadFailureIsLoggedInStore() async {
+        let sample = makeSample(id: "base", savedAt: Date())
+        let root = makePlaybackRoot()
+        let tempDownload = root.appendingPathComponent("error.json")
+        try? FileManager.default.createDirectory(at: tempDownload.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? Data("{\"detail\":\"expired\"}".utf8).write(to: tempDownload)
+
+        let manager = DownloadManager(
+            baseDirectory: root,
+            downloadOperation: { sourceURL, onProgress in
+                _ = sourceURL
+                await onProgress?(0.35)
+                let response = HTTPURLResponse(
+                    url: URL(string: "https://example.com/download")!,
+                    statusCode: 403,
+                    httpVersion: nil,
+                    headerFields: [
+                        "Content-Type": "application/json",
+                    ]
+                )!
+                return (tempDownload, response)
+            }
+        )
+
+        let store = SampleLibraryStore(
+            repository: FakeRepository(items: [sample], savedLibrary: [sample]),
+            downloadManager: manager,
+            localStateStore: LocalSampleStateStore(baseDirectory: root)
+        )
+        await store.load()
+
+        await store.download(sampleID: sample.id)
+
+        XCTAssertEqual(store.samples.first?.downloadState, .failed)
+        XCTAssertTrue(store.downloadLogs[sample.id]?.contains(where: { $0.message.contains("HTTP 403") }) == true)
     }
 
     @MainActor

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LibraryView: View {
     @EnvironmentObject private var store: SampleLibraryStore
+    @State private var isShowingDownloadMonitor = false
 
     var body: some View {
         NavigationStack {
@@ -67,6 +68,22 @@ struct LibraryView: View {
             }
             .background(AppTheme.bg)
             .navigationTitle("Library")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if store.hasActiveDownloads {
+                        Button {
+                            isShowingDownloadMonitor = true
+                        } label: {
+                            DownloadMonitorToolbarIcon(count: store.activeDownloads.count)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .sheet(isPresented: $isShowingDownloadMonitor) {
+                DownloadMonitorSheet()
+                    .environmentObject(store)
+            }
         }
     }
 
@@ -181,5 +198,221 @@ private struct DownloadAccessoryRing: View {
 
     private var progressValue: Double {
         min(max(progress ?? 0, 0.04), 1)
+    }
+}
+
+private struct DownloadMonitorToolbarIcon: View {
+    let count: Int
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AppTheme.accent)
+
+            Text("\(count)")
+                .font(.caption2.monospacedDigit().weight(.bold))
+                .foregroundStyle(AppTheme.bg)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(AppTheme.label, in: Capsule())
+                .offset(x: 8, y: -7)
+        }
+        .frame(width: 28, height: 28)
+    }
+}
+
+private struct DownloadMonitorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: SampleLibraryStore
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !store.activeDownloads.isEmpty {
+                    Section("Active Downloads") {
+                        ForEach(store.activeDownloads) { download in
+                            DownloadMonitorRow(download: download)
+                                .listRowBackground(AppTheme.bg)
+                        }
+                    }
+                }
+
+                Section(store.recentDownloadLogEntries.isEmpty ? "Download Logs" : "Recent Logs") {
+                    if store.recentDownloadLogEntries.isEmpty {
+                        Text("Logs will appear here while downloads are running.")
+                            .foregroundStyle(.secondary)
+                            .listRowBackground(AppTheme.bg)
+                    } else {
+                        ForEach(Array(store.recentDownloadLogEntries.prefix(80))) { entry in
+                            DownloadLogRow(
+                                entry: entry,
+                                sampleTitle: store.downloadTitle(for: entry.sampleID)
+                            )
+                            .listRowBackground(AppTheme.bg)
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.bg)
+            .navigationTitle("Download Monitor")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+private struct DownloadMonitorRow: View {
+    let download: DownloadRuntimeSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                DownloadMonitorAvatar(url: download.uploaderAvatarURL)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(download.title)
+                        .foregroundStyle(AppTheme.label)
+                        .lineLimit(2)
+
+                    Text(download.uploaderName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(progressLabel)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(AppTheme.label)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(download.statusText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.accent)
+
+                ProgressView(value: progressValue)
+                    .progressViewStyle(.linear)
+                    .tint(AppTheme.accent)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var progressValue: Double {
+        min(max(download.progress ?? 0, 0), 1)
+    }
+
+    private var progressLabel: String {
+        if let progress = download.progress {
+            return progress.formatted(.percent.precision(.fractionLength(0)))
+        }
+        return download.state == .queued ? "Queued" : "Waiting"
+    }
+}
+
+private struct DownloadMonitorAvatar: View {
+    let url: URL?
+
+    var body: some View {
+        Group {
+            if let url {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    fallback
+                }
+            } else {
+                fallback
+            }
+        }
+        .frame(width: 42, height: 42)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
+    }
+
+    private var fallback: some View {
+        ZStack {
+            LinearGradient(
+                colors: [AppTheme.accent.opacity(0.8), AppTheme.panel],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Image(systemName: "person.crop.circle.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.black.opacity(0.7))
+        }
+    }
+}
+
+private struct DownloadLogRow: View {
+    let entry: DownloadLogEntry
+    let sampleTitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(sampleTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.label)
+                    .lineLimit(1)
+
+                Spacer(minLength: 12)
+
+                Text(entry.timestamp, style: .time)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(alignment: .top, spacing: 8) {
+                Text(levelLabel)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(levelTint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(levelTint.opacity(0.14), in: Capsule())
+
+                Text(entry.message)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.label.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var levelLabel: String {
+        switch entry.level {
+        case .info:
+            return "INFO"
+        case .warning:
+            return "WARN"
+        case .error:
+            return "ERROR"
+        }
+    }
+
+    private var levelTint: Color {
+        switch entry.level {
+        case .info:
+            return AppTheme.accent
+        case .warning:
+            return Color(red: 0.93, green: 0.76, blue: 0.36)
+        case .error:
+            return Color(red: 0.89, green: 0.34, blue: 0.31)
+        }
     }
 }

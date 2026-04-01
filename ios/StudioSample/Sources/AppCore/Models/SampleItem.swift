@@ -70,7 +70,7 @@ struct TagScore: Hashable, Codable {
     let confidence: Double
 }
 
-enum DownloadState: String, Hashable, Codable {
+enum DownloadState: String, Hashable, Codable, Sendable {
     case notDownloaded = "not_downloaded"
     case queued
     case downloading
@@ -78,10 +78,55 @@ enum DownloadState: String, Hashable, Codable {
     case failed
 }
 
-enum StreamState: String, Hashable, Codable {
+enum StreamState: String, Hashable, Codable, Sendable {
     case idle
     case resolving
     case ready
     case expired
     case failed
+}
+
+enum DownloadLogLevel: String, Hashable, Codable, Sendable {
+    case info
+    case warning
+    case error
+}
+
+struct DownloadLogEntry: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let sampleID: String
+    let timestamp: Date
+    let level: DownloadLogLevel
+    let message: String
+
+    init(
+        id: UUID = UUID(),
+        sampleID: String,
+        timestamp: Date = .now,
+        level: DownloadLogLevel,
+        message: String
+    ) {
+        self.id = id
+        self.sampleID = sampleID
+        self.timestamp = timestamp
+        self.level = level
+        self.message = message
+    }
+}
+
+struct DownloadRuntimeSnapshot: Identifiable, Hashable, Sendable {
+    let id: String
+    let title: String
+    let uploaderName: String
+    let uploaderAvatarURL: URL?
+    let statusText: String
+    let progress: Double?
+    let state: DownloadState
+    let startedAt: Date
+    let updatedAt: Date
+}
+
+struct DownloadTransportEvent: Hashable, Sendable {
+    let level: DownloadLogLevel
+    let message: String
 }
