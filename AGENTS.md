@@ -183,6 +183,6 @@ bd automatically syncs via Dolt:
 - ❌ Do NOT use external issue trackers
 - ❌ Do NOT duplicate tracking systems
 
-For more details, see README.md and docs/QUICKSTART.md.
+For more details, see [README.md](README.md) and [docs/QUICKSTART.md](docs/QUICKSTART.md).
 
 <!-- END BEADS INTEGRATION -->
