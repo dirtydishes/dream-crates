@@ -559,6 +559,42 @@ final class AppCoreTests: XCTestCase {
     }
 
     @MainActor
+    func testWarpPlaybackRejectsUnsupportedOfflineMediaType() async {
+        let sample = makeSample(id: "base", savedAt: nil, durationSeconds: 2)
+        let root = makePlaybackRoot()
+        let repository = FakeRepository(items: [sample])
+        let playbackCache = PlaybackCache(baseDirectory: root) { _ in
+            let temporaryURL = root.appendingPathComponent("tmp.webm")
+            try Data("webm".utf8).write(to: temporaryURL)
+            let response = HTTPURLResponse(
+                url: URL(string: "https://example.com/download")!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "audio/webm",
+                ]
+            )!
+            return (temporaryURL, response)
+        }
+
+        let store = SampleLibraryStore(
+            repository: repository,
+            playbackCache: playbackCache,
+            localStateStore: LocalSampleStateStore(baseDirectory: root)
+        )
+        await store.load()
+
+        do {
+            _ = try await store.preparePlaybackURL(for: sample.id, mode: .warp)
+            XCTFail("Expected warp playback preparation to fail")
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertTrue(message.contains("audio/webm"))
+            XCTAssertTrue(message.contains("Warp playback"))
+        }
+    }
+
+    @MainActor
     func testRemovingDownloadDeletesStoredFileAndResetsState() async throws {
         let sample = makeSample(id: "base", savedAt: nil, durationSeconds: 2)
         let root = makePlaybackRoot()

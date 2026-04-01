@@ -4,6 +4,20 @@ import UniformTypeIdentifiers
 actor PlaybackCache {
     typealias DownloadOperation = @Sendable (URL) async throws -> (temporaryURL: URL, response: URLResponse)
 
+    enum CacheError: LocalizedError {
+        case invalidResponse
+        case unsupportedOfflineMediaType(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidResponse:
+                return "The playback cache did not receive a valid server response."
+            case let .unsupportedOfflineMediaType(mimeType):
+                return "Warp playback cannot open \(mimeType) as a local audio file on iPhone."
+            }
+        }
+    }
+
     private let fileManager: FileManager
     private let baseDirectory: URL?
     private let downloadOperation: DownloadOperation
@@ -47,6 +61,7 @@ actor PlaybackCache {
 
         let task = Task { [downloadOperation] in
             let download = try await downloadOperation(remoteURL)
+            try self.validate(response: download.response)
             return try await self.storeDownloadedFile(
                 sampleID: sampleID,
                 temporaryURL: download.temporaryURL,
@@ -107,18 +122,30 @@ actor PlaybackCache {
     }
 
     private func destinationFilename(remoteURL: URL, response: URLResponse) -> String {
+        let ext = preferredExtension(remoteURL: remoteURL, response: response)
+        let filename: String
         if let suggested = response.suggestedFilename, !suggested.isEmpty {
-            return suggested
+            let base = URL(fileURLWithPath: suggested).deletingPathExtension().lastPathComponent
+            filename = base.isEmpty ? "playback" : base
+        } else {
+            filename = remoteURL.deletingPathExtension().lastPathComponent.isEmpty
+                ? "playback"
+                : remoteURL.deletingPathExtension().lastPathComponent
         }
 
-        let ext = preferredExtension(remoteURL: remoteURL, response: response)
         guard !ext.isEmpty else {
-            return "playback"
+            return filename
         }
-        return "playback.\(ext)"
+        return "\(filename).\(ext)"
     }
 
     private func preferredExtension(remoteURL: URL, response: URLResponse) -> String {
+        if let mimeType = response.mimeType,
+           let type = UTType(mimeType: mimeType),
+           let ext = type.preferredFilenameExtension {
+            return ext.lowercased()
+        }
+
         if let suggested = response.suggestedFilename {
             let ext = URL(fileURLWithPath: suggested).pathExtension
             if !ext.isEmpty {
@@ -126,13 +153,22 @@ actor PlaybackCache {
             }
         }
 
-        if let mimeType = response.mimeType,
-           let type = UTType(mimeType: mimeType),
-           let ext = type.preferredFilenameExtension {
-            return ext.lowercased()
+        return remoteURL.pathExtension.lowercased()
+    }
+
+    private func validate(response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CacheError.invalidResponse
         }
 
-        return remoteURL.pathExtension.lowercased()
+        if let mimeType = httpResponse.mimeType, isKnownUnsupportedOfflineMediaType(mimeType) {
+            throw CacheError.unsupportedOfflineMediaType(mimeType)
+        }
+    }
+
+    private func isKnownUnsupportedOfflineMediaType(_ mimeType: String) -> Bool {
+        let normalized = mimeType.lowercased()
+        return normalized == "audio/webm" || normalized == "video/webm"
     }
 
     private func cacheDirectory(createIfNeeded: Bool) throws -> URL {
