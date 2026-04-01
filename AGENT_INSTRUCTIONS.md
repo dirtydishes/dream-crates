@@ -1,8 +1,8 @@
 # Detailed Agent Instructions for Beads Development
 
-**For project overview and quick start, see [AGENTS.md](AGENTS.md)**
+**Start with [AGENTS.md](AGENTS.md)** for the compatibility entrypoint, project overview, and quick-start guidance.
 
-This document contains detailed operational instructions for AI agents working on beads development, testing, and releases.
+**This document extends [AGENTS.md](AGENTS.md)** with detailed operational instructions for AI agents working on beads development, testing, and releases.
 
 ## Development Guidelines
 
