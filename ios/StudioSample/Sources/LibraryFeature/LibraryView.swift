@@ -205,20 +205,25 @@ private struct DownloadMonitorToolbarIcon: View {
     let count: Int
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(AppTheme.accent)
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.06))
+                .frame(width: 38, height: 38)
 
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(AppTheme.accent)
+        }
+        .overlay(alignment: .topTrailing) {
             Text("\(count)")
                 .font(.caption2.monospacedDigit().weight(.bold))
                 .foregroundStyle(AppTheme.bg)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(AppTheme.label, in: Capsule())
-                .offset(x: 8, y: -7)
+                .offset(x: 4, y: -4)
         }
-        .frame(width: 28, height: 28)
+        .frame(width: 44, height: 44)
     }
 }
 

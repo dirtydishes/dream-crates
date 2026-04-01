@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 from fastapi.testclient import TestClient
@@ -121,7 +122,7 @@ def test_media_proxy_streams_upstream_audio(monkeypatch):
                     "Content-Range": "bytes 0-2/3",
                     "Content-Type": "audio/mp4",
                 },
-                content=b"abc",
+                stream=httpx.ByteStream(b"abc"),
                 request=request,
             )
 
@@ -173,36 +174,21 @@ def test_media_proxy_download_sets_filename_from_content_type(monkeypatch):
                 headers={},
             )
 
-    class FakeAsyncClient:
-        def __init__(self, *args, **kwargs):
-            _ = args
-            _ = kwargs
-
-        def build_request(self, method, url, headers=None):
-            return httpx.Request(method, url, headers=headers)
-
-        async def send(self, request, stream=False):
-            _ = stream
-            return httpx.Response(
-                200,
-                headers={
-                    "Content-Length": "3",
-                    "Content-Type": "audio/webm",
-                },
-                content=b"abc",
-                request=request,
-            )
-
-        async def aclose(self):
-            return None
+    class FakeOfflineMediaCache:
+        def resolve(self, sample_id, source):
+            _ = (sample_id, source)
+            path = Path("/tmp/test-download-proxy.m4a")
+            path.write_bytes(b"a" * 4096)
+            return path
 
     monkeypatch.setattr(main_mod, "resolver", FakeResolver())
-    monkeypatch.setattr(main_mod.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(main_mod, "offline_media_cache", FakeOfflineMediaCache())
 
     response = client.get("/v1/media/sample-download-proxy/download")
 
     assert response.status_code == 200
-    assert response.headers["content-disposition"] == 'attachment; filename="sample-download-proxy.webm"'
+    assert response.headers["content-disposition"] == 'attachment; filename="sample-download-proxy.m4a"'
+    assert response.headers["content-type"].startswith("audio/mp4")
 
 
 def test_register_device_and_update_preferences():

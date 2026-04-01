@@ -158,7 +158,10 @@ actor PlaybackCache {
 
     private func validate(response: URLResponse) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw CacheError.invalidResponse
+            if let mimeType = response.mimeType, isKnownUnsupportedOfflineMediaType(mimeType) {
+                throw CacheError.unsupportedOfflineMediaType(mimeType)
+            }
+            return
         }
 
         if let mimeType = httpResponse.mimeType, isKnownUnsupportedOfflineMediaType(mimeType) {

@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta, timezone
 import logging
 import mimetypes
+from pathlib import Path
 
 import httpx
 from fastapi import Body, FastAPI, HTTPException, Request, Response
 from starlette.background import BackgroundTask
-from starlette.responses import StreamingResponse
+from starlette.responses import FileResponse, StreamingResponse
 
 from app.config import settings
 from app.models import (
@@ -25,6 +26,7 @@ from app.services.device_notifications import DeviceNotificationService
 from app.services.apns import APNSClient
 from app.services.channel_catalog import ChannelCatalog
 from app.services.push import PushDispatcher
+from app.services.offline_media import OfflineMediaCache, OfflineMediaError
 from app.services.resolver import PlaybackResolver
 from app.services.store import SampleStore
 from app.services.tagging import RulesTagger
@@ -55,6 +57,9 @@ resolver = PlaybackResolver(
     command_template=settings.resolver_command,
     fallback_url=settings.resolver_fallback_url,
     ttl_seconds=settings.resolver_ttl_seconds,
+)
+offline_media_cache = OfflineMediaCache(
+    Path(settings.storage_path).resolve().parent / "offline-media"
 )
 
 DEFAULT_CHANNELS: list[Channel] = [
@@ -188,13 +193,26 @@ async def media_proxy(sample_id: str, mode: str, request: Request):
     if sample is None:
         raise HTTPException(status_code=404, detail=f"Unknown sample: {sample_id}")
 
-    if mode == "stream":
-        resolved = resolver.resolve_stream(sample)
-    elif mode == "download":
-        resolved = resolver.resolve_download(sample)
-    else:
+    if mode == "download":
+        try:
+            normalized = offline_media_cache.resolve(
+                sample.id,
+                resolver.resolve_download(sample),
+            )
+        except OfflineMediaError as exc:
+            logger.exception("Offline media preparation failed for %s", sample_id)
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        return FileResponse(
+            path=normalized,
+            media_type="audio/mp4",
+            filename=_download_filename(sample_id, "audio/mp4"),
+        )
+
+    if mode != "stream":
         raise HTTPException(status_code=404, detail=f"Unsupported media mode: {mode}")
 
+    resolved = resolver.resolve_stream(sample)
     request_headers = dict(resolved.headers)
     for header_name in ("range", "if-range"):
         header_value = request.headers.get(header_name)
@@ -214,15 +232,12 @@ async def media_proxy(sample_id: str, mode: str, request: Request):
         raise HTTPException(status_code=502, detail="Unable to fetch upstream media") from exc
 
     proxy_headers = _filter_proxy_headers(upstream_response.headers)
-    if mode == "download" and "content-disposition" not in {name.lower() for name in proxy_headers}:
-        proxy_headers["Content-Disposition"] = f'attachment; filename="{_download_filename(sample_id, upstream_response.headers.get("content-type"))}"'
-
     cleanup = BackgroundTask(_close_upstream_response, upstream_response, client)
     if request.method == "HEAD":
         return Response(status_code=upstream_response.status_code, headers=proxy_headers, background=cleanup)
 
     return StreamingResponse(
-        upstream_response.aiter_bytes(),
+        upstream_response.aiter_raw(),
         status_code=upstream_response.status_code,
         headers=proxy_headers,
         background=cleanup,
