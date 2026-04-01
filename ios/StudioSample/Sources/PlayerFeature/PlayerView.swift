@@ -5,151 +5,56 @@ struct PlayerView: View {
     @EnvironmentObject private var playback: PlaybackController
     @EnvironmentObject private var playbackPreferences: PlaybackPreferencesStore
 
+    private let baseSpinDuration = 3.2
+    private let recordArtworkScale = 1.08
+
     @State private var rotation: Double = 0
     @State private var spinner: Task<Void, Never>?
     @State private var scrubPosition: Double = 0
     @State private var isScrubbing = false
+    @State private var showingPlaybackControls = false
 
     var body: some View {
         let selected = store.currentSample
 
-        VStack(spacing: 24) {
-            Text("Studio Deck")
-                .font(.title2.bold())
-                .foregroundStyle(AppTheme.label)
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 20) {
+                Text("Studio Deck")
+                    .font(.title2.bold())
+                    .foregroundStyle(AppTheme.label)
 
-            Text(selected?.title ?? "No sample selected")
-                .font(.headline)
-                .foregroundStyle(AppTheme.label)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-
-            if let selected {
-                HStack(spacing: 10) {
-                    UploaderAvatarView(imageURL: selected.channelAvatarURL, fallbackText: selected.uploaderName)
-                        .frame(width: 28, height: 28)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(selected.uploaderName)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.label)
-
-                        if let subtitle = selected.uploaderSubtitle {
-                            Text(subtitle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(AppTheme.panel)
-                .clipShape(Capsule())
-            }
-
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.black, AppTheme.panel],
-                            center: .center,
-                            startRadius: 8,
-                            endRadius: 140
-                        )
-                    )
-                    .frame(width: 260, height: 260)
-                    .overlay(Circle().stroke(AppTheme.accent.opacity(0.6), lineWidth: 2))
-                if let artworkURL = selected?.artworkURL {
-                    AsyncImage(url: artworkURL) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        ProgressView()
-                            .tint(AppTheme.label)
-                    }
-                    .frame(width: 220, height: 220)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
-                }
-                Circle()
-                    .fill(AppTheme.accent)
-                    .frame(width: 26, height: 26)
-            }
-            .rotationEffect(.degrees(rotation))
-            .shadow(color: .black.opacity(0.4), radius: 20, x: 0, y: 12)
-
-            VStack(spacing: 8) {
-                Slider(
-                    value: Binding(
-                        get: { isScrubbing ? scrubPosition : playback.currentTime },
-                        set: { scrubPosition = $0 }
-                    ),
-                    in: 0 ... max(playback.duration, 1),
-                    onEditingChanged: { editing in
-                        isScrubbing = editing
-                        if !editing {
-                            playback.seek(to: scrubPosition)
-                        }
-                    }
-                )
-                .tint(AppTheme.accent)
-                .disabled(!playback.hasCurrentItem)
-
-                HStack {
-                    Text(formatTime(isScrubbing ? scrubPosition : playback.currentTime))
-                    Spacer()
-                    Text(formatTime(playback.duration))
-                }
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 20) {
-                Button(playback.isPlaying ? "Pause" : "Play") {
-                    if playback.isPlaying {
-                        playback.pause()
-                    } else if playback.canResumeCurrentItem {
-                        playback.resume()
-                    } else if let selected {
-                        Task {
-                            await play(selected)
-                        }
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accent)
-                .disabled(selected == nil)
-
-                Menu {
-                    ForEach(stride(from: 0.5, through: 2.0, by: 0.25).map { $0 }, id: \.self) { value in
-                        Button(String(format: "%.2fx", value)) {
-                            playbackPreferences.speed = value
-                            playback.updateRate(Float(value))
-                        }
-                    }
-                } label: {
-                    Text(String(format: "Speed %.2fx", speed))
-                }
+                Text(selected?.title ?? "No sample selected")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.label)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
 
                 if let selected {
-                    Button {
-                        Task {
-                            await store.toggleSaved(sampleID: selected.id)
-                        }
-                    } label: {
-                        Image(systemName: selected.isSaved ? "bookmark.fill" : "bookmark")
-                    }
-                    .buttonStyle(.bordered)
+                    uploaderBadge(for: selected)
                 }
+
+                recordView(for: selected)
+
+                progressSection
+
+                playbackControlsButton
+
+                transportSection(for: selected)
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity)
         }
-        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppTheme.bg)
+        .background(AppTheme.bg.ignoresSafeArea())
+        .sheet(isPresented: $showingPlaybackControls) {
+            playbackControlsSheet
+        }
         .onAppear {
             playback.configureIfNeeded()
-            playback.updateRate(Float(speed))
+            playback.applyPreferences(playbackPreferences.currentSettings)
             scrubPosition = playback.currentTime
         }
         .onChange(of: playback.isPlaying) { _, isPlaying in
@@ -167,18 +72,378 @@ struct PlayerView: View {
             guard !isScrubbing else { return }
             scrubPosition = playback.currentTime
         }
+        .onChange(of: playbackPreferences.speed) { _, _ in
+            playback.applyPreferences(playbackPreferences.currentSettings)
+            if playback.isPlaying {
+                startSpinning()
+            }
+        }
+        .onChange(of: playbackPreferences.transposeSemitones) { _, _ in
+            playback.applyPreferences(playbackPreferences.currentSettings)
+        }
+        .onChange(of: playbackPreferences.mode) { _, newMode in
+            Task {
+                await updatePlaybackMode(to: newMode)
+            }
+        }
     }
 
-    private var speed: Double { playbackPreferences.speed }
+    private func uploaderBadge(for selected: SampleItem) -> some View {
+        HStack(spacing: 10) {
+            UploaderAvatarView(imageURL: selected.channelAvatarURL, fallbackText: selected.uploaderName)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(selected.uploaderName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.label)
+
+                if let subtitle = selected.uploaderSubtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(AppTheme.panel)
+        .clipShape(Capsule())
+    }
+
+    private func recordView(for selected: SampleItem?) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.black, AppTheme.panel],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 260, height: 260)
+
+            Group {
+                if let artworkURL = selected?.artworkURL {
+                    AsyncImage(url: artworkURL) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .scaleEffect(recordArtworkScale)
+                    } placeholder: {
+                        ProgressView()
+                            .tint(AppTheme.label)
+                    }
+                } else {
+                    ZStack {
+                        AppTheme.panel.opacity(0.7)
+                        Image(systemName: "music.note")
+                            .font(.system(size: 48, weight: .semibold))
+                            .foregroundStyle(AppTheme.label.opacity(0.8))
+                    }
+                    .scaleEffect(recordArtworkScale)
+                }
+            }
+            .frame(width: 260, height: 260)
+            .clipShape(Circle())
+
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.clear, Color.black.opacity(0.62)],
+                        center: .center,
+                        startRadius: 32,
+                        endRadius: 126
+                    )
+                )
+                .frame(width: 260, height: 260)
+
+            Circle()
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                .frame(width: 260, height: 260)
+
+            Circle()
+                .stroke(Color.black.opacity(0.28), lineWidth: 1)
+                .frame(width: 234, height: 234)
+
+            Circle()
+                .stroke(Color.black.opacity(0.22), lineWidth: 1)
+                .frame(width: 200, height: 200)
+
+            Circle()
+                .stroke(Color.black.opacity(0.18), lineWidth: 1)
+                .frame(width: 166, height: 166)
+
+            Circle()
+                .fill(AppTheme.accent)
+                .frame(width: 54, height: 54)
+                .overlay(
+                    Circle()
+                        .fill(Color.black.opacity(0.84))
+                        .frame(width: 14, height: 14)
+                )
+
+            Circle()
+                .stroke(AppTheme.accent.opacity(0.65), lineWidth: 2)
+                .frame(width: 260, height: 260)
+        }
+        .rotationEffect(.degrees(rotation))
+        .shadow(color: .black.opacity(0.42), radius: 22, x: 0, y: 12)
+    }
+
+    private var progressSection: some View {
+        VStack(spacing: 8) {
+            Slider(
+                value: Binding(
+                    get: { isScrubbing ? scrubPosition : playback.currentTime },
+                    set: { scrubPosition = $0 }
+                ),
+                in: 0 ... max(playback.duration, 1),
+                onEditingChanged: { editing in
+                    isScrubbing = editing
+                    if !editing {
+                        playback.seek(to: scrubPosition)
+                    }
+                }
+            )
+            .tint(AppTheme.accent)
+            .disabled(!playback.hasCurrentItem)
+
+            HStack {
+                Text(formatTime(isScrubbing ? scrubPosition : playback.currentTime))
+                Spacer()
+                Text(formatTime(playback.duration))
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var playbackControlsButton: some View {
+        Button {
+            showingPlaybackControls = true
+        } label: {
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Playback")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.label)
+
+                    Text(playbackSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 12)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(playbackPreferences.mode.displayName.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .kerning(0.8)
+                        .foregroundStyle(AppTheme.accent)
+
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(AppTheme.label)
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [AppTheme.panel, AppTheme.panel.opacity(0.92)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func transportSection(for selected: SampleItem?) -> some View {
+        HStack(spacing: 16) {
+            Button {
+                if playback.isPlaying {
+                    playback.pause()
+                } else if playback.canResumeCurrentItem {
+                    playback.resume()
+                } else if let selected {
+                    Task {
+                        await play(selected)
+                    }
+                }
+            } label: {
+                Label(playback.isPlaying ? "Pause" : "Play", systemImage: playback.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.headline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(AppTheme.accent)
+            .disabled(selected == nil)
+
+            if let selected {
+                Button {
+                    Task {
+                        await store.toggleSaved(sampleID: selected.id)
+                    }
+                } label: {
+                    Image(systemName: selected.isSaved ? "bookmark.fill" : "bookmark")
+                        .font(.title3.weight(.semibold))
+                        .frame(width: 54, height: 54)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private var playbackControlsSheet: some View {
+        VStack(spacing: 18) {
+            Capsule()
+                .fill(Color.white.opacity(0.16))
+                .frame(width: 42, height: 5)
+                .padding(.top, 8)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Playback")
+                    .font(.title3.bold())
+                    .foregroundStyle(AppTheme.label)
+
+                Text(playbackHint)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 16) {
+                Picker("Mode", selection: $playbackPreferences.mode) {
+                    ForEach(PlaybackMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                sliderSection(
+                    title: "Speed",
+                    valueLabel: String(format: "%.2fx", playbackPreferences.speed),
+                    resetLabel: "Reset",
+                    resetAction: { playbackPreferences.speed = 1.0 }
+                ) {
+                    Slider(
+                        value: $playbackPreferences.speed,
+                        in: PlaybackSettings.speedRange,
+                        step: 0.05
+                    )
+                    .tint(AppTheme.accent)
+                }
+
+                if playbackPreferences.mode == .warp {
+                    sliderSection(
+                        title: "Transpose",
+                        valueLabel: String(format: "%+.0f st", playbackPreferences.transposeSemitones),
+                        resetLabel: "Reset",
+                        resetAction: { playbackPreferences.transposeSemitones = 0 }
+                    ) {
+                        Slider(
+                            value: $playbackPreferences.transposeSemitones,
+                            in: PlaybackSettings.transposeRange,
+                            step: 1
+                        )
+                        .tint(AppTheme.accent)
+                    }
+                }
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.panel)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                    )
+            )
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(AppTheme.bg.ignoresSafeArea())
+        .presentationDetents([.height(playbackControlsHeight)])
+        .presentationDragIndicator(.hidden)
+    }
+
+    private func sliderSection<Content: View>(
+        title: String,
+        valueLabel: String,
+        resetLabel: String,
+        resetAction: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.label)
+
+                Spacer()
+
+                Button(resetLabel, action: resetAction)
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppTheme.accent)
+
+                Text(valueLabel)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            content()
+        }
+    }
+
+    private var playbackSummary: String {
+        switch playbackPreferences.mode {
+        case .turntable:
+            return String(format: "%.2fx, pitch linked.", playbackPreferences.speed)
+        case .warp:
+            return String(format: "%.2fx, %+.0f st.", playbackPreferences.speed, playbackPreferences.transposeSemitones)
+        }
+    }
+
+    private var playbackHint: String {
+        switch playbackPreferences.mode {
+        case .turntable:
+            return "Pitch follows speed."
+        case .warp:
+            return "Speed and pitch stay separate."
+        }
+    }
+
+    private var playbackControlsHeight: CGFloat {
+        playbackPreferences.mode == .warp ? 336 : 272
+    }
 
     private func play(_ item: SampleItem) async {
         do {
-            let sourceURL = try await store.resolvedPlaybackURL(for: item.id)
+            let sourceURL = try await store.preparePlaybackURL(
+                for: item.id,
+                mode: playbackPreferences.mode
+            )
             playback.configureIfNeeded()
             playback.play(
                 title: item.title,
                 sourceURL: sourceURL,
-                rate: Float(speed)
+                settings: playbackPreferences.currentSettings,
+                expectedDuration: item.durationSeconds.map(Double.init)
             )
         } catch {
             playback.stopAndReset()
@@ -190,11 +455,11 @@ struct PlayerView: View {
         spinner = Task {
             while !Task.isCancelled {
                 await MainActor.run {
-                    withAnimation(.linear(duration: 1.2 / speed)) {
+                    withAnimation(.linear(duration: spinDuration)) {
                         rotation += 360
                     }
                 }
-                try? await Task.sleep(for: .seconds(1.2 / speed))
+                try? await Task.sleep(for: .seconds(spinDuration))
             }
         }
     }
@@ -213,5 +478,34 @@ struct PlayerView: View {
         let minutes = total / 60
         let remainder = total % 60
         return String(format: "%d:%02d", minutes, remainder)
+    }
+
+    private var spinDuration: Double {
+        let effectiveRate = max(playback.effectiveVisualRate, 0.25)
+        return baseSpinDuration / effectiveRate
+    }
+
+    private func updatePlaybackMode(to mode: PlaybackMode) async {
+        guard playback.hasCurrentItem, let selected = store.currentSample else {
+            playback.applyPreferences(playbackPreferences.currentSettings)
+            return
+        }
+
+        let wasPlaying = playback.isPlaying
+        let startTime = playback.currentTime
+
+        do {
+            let sourceURL = try await store.preparePlaybackURL(for: selected.id, mode: mode)
+            playback.play(
+                title: selected.title,
+                sourceURL: sourceURL,
+                settings: playbackPreferences.currentSettings,
+                expectedDuration: selected.durationSeconds.map(Double.init),
+                startTime: startTime,
+                autoplay: wasPlaying
+            )
+        } catch {
+            playback.stopAndReset()
+        }
     }
 }

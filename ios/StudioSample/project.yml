@@ -12,11 +12,14 @@ targets:
     type: application
     platform: iOS
     sources:
-      - Sources
+      - path: Sources
+        excludes:
+          - DownloadActivityWidget
     info:
       path: Sources/StudioSampleApp/Info.plist
       properties:
         UILaunchScreen: {}
+        NSSupportsLiveActivities: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIBackgroundModes:
@@ -35,6 +38,23 @@ targets:
     scheme:
       testTargets:
         - StudioSampleTests
+  DownloadActivityWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/DownloadActivityWidget
+      - path: Sources/DownloadActivityShared
+    info:
+      path: Sources/DownloadActivityWidget/Info.plist
+      properties:
+        CFBundleDisplayName: "Dream Crates Downloads"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        NSSupportsLiveActivities: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dreamcrates.studiosample.downloadactivity
+        TARGETED_DEVICE_FAMILY: "1"
   StudioSampleTests:
     type: bundle.unit-test
     platform: iOS

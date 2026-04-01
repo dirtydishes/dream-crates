@@ -57,6 +57,10 @@ struct SampleFeedRow: View {
 
                 if item.downloadState == .downloaded {
                     metaLabel("Offline", systemImage: "arrow.down.circle.fill")
+                } else if item.downloadState == .downloading || item.downloadState == .queued {
+                    metaLabel("Downloading", systemImage: "arrow.down.circle")
+                } else if item.downloadState == .failed {
+                    metaLabel("Retry download", systemImage: "exclamationmark.arrow.circlepath")
                 }
 
                 Spacer(minLength: 0)
