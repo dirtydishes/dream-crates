@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LibraryView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var store: SampleLibraryStore
 
     var body: some View {
@@ -13,13 +14,14 @@ struct LibraryView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(item.title)
-                                    .foregroundStyle(AppTheme.label)
+                                    .font(theme.font(.body, weight: .medium))
+                                    .foregroundStyle(theme.label)
                                 Text(item.savedAt ?? item.publishedAt, style: .date)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(theme.font(.caption))
+                                    .foregroundStyle(theme.secondaryLabel)
                                 Text(downloadLabel(for: item.downloadState))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .font(theme.font(.caption2))
+                                    .foregroundStyle(theme.secondaryLabel)
                             }
 
                             Spacer()
@@ -46,12 +48,12 @@ struct LibraryView: View {
                         .onTapGesture {
                             store.select(item.id)
                         }
-                        .listRowBackground(AppTheme.bg)
+                        .listRowBackground(theme.bg)
                     }
                     .scrollContentBackground(.hidden)
                 }
             }
-            .background(AppTheme.bg)
+            .background(theme.bg)
             .navigationTitle("Library")
         }
     }

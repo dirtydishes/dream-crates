@@ -31,6 +31,11 @@
 	<string>Copyright © 2026 deepdream llc</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Dream Crates does not track you across apps.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>CaskaydiaCoveNerdFontMono-Regular.ttf</string>
+		<string>CaskaydiaCoveNerdFontMono-Bold.ttf</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

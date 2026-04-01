@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PlayerView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var store: SampleLibraryStore
     @EnvironmentObject private var playback: PlaybackController
     @EnvironmentObject private var playbackPreferences: PlaybackPreferencesStore
@@ -19,12 +20,12 @@ struct PlayerView: View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 20) {
                 Text("Studio Deck")
-                    .font(.title2.bold())
-                    .foregroundStyle(AppTheme.label)
+                    .font(theme.font(.title2, weight: .bold))
+                    .foregroundStyle(theme.label)
 
                 Text(selected?.title ?? "No sample selected")
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.label)
+                    .font(theme.font(.headline, weight: .regular))
+                    .foregroundStyle(theme.label)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)
@@ -47,7 +48,7 @@ struct PlayerView: View {
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppTheme.bg.ignoresSafeArea())
+        .background(theme.bg.ignoresSafeArea())
         .sheet(isPresented: $showingPlaybackControls) {
             playbackControlsSheet
         }
@@ -94,19 +95,19 @@ struct PlayerView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(selected.uploaderName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.label)
+                    .font(theme.font(.subheadline, weight: .semibold))
+                    .foregroundStyle(theme.label)
 
                 if let subtitle = selected.uploaderSubtitle {
                     Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.font(.caption))
+                        .foregroundStyle(theme.secondaryLabel)
                 }
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(AppTheme.panel)
+        .background(theme.panel)
         .clipShape(Capsule())
     }
 
@@ -115,7 +116,7 @@ struct PlayerView: View {
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [Color.black, AppTheme.panel],
+                        colors: [Color.black, theme.panel],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -130,14 +131,14 @@ struct PlayerView: View {
                             .scaledToFill()
                     } placeholder: {
                         ProgressView()
-                            .tint(AppTheme.label)
+                            .tint(theme.label)
                     }
                 } else {
                     ZStack {
-                        AppTheme.panel.opacity(0.7)
+                        theme.panel.opacity(0.7)
                         Image(systemName: "music.note")
                             .font(.system(size: 48, weight: .semibold))
-                            .foregroundStyle(AppTheme.label.opacity(0.8))
+                            .foregroundStyle(theme.label.opacity(0.8))
                     }
                 }
             }
@@ -172,16 +173,16 @@ struct PlayerView: View {
                 .frame(width: 160, height: 160)
 
             Circle()
-                .fill(AppTheme.accent)
+                .fill(theme.accent)
                 .frame(width: 54, height: 54)
                 .overlay(
                     Circle()
-                        .fill(Color.black.opacity(0.84))
+                        .fill(theme.accentLabel.opacity(0.92))
                         .frame(width: 14, height: 14)
                 )
 
             Circle()
-                .stroke(AppTheme.accent.opacity(0.65), lineWidth: 2)
+                .stroke(theme.accent.opacity(0.65), lineWidth: 2)
                 .frame(width: 260, height: 260)
         }
         .rotationEffect(.degrees(rotation))
@@ -203,7 +204,7 @@ struct PlayerView: View {
                     }
                 }
             )
-            .tint(AppTheme.accent)
+            .tint(theme.accent)
             .disabled(!playback.hasCurrentItem)
 
             HStack {
@@ -211,8 +212,9 @@ struct PlayerView: View {
                 Spacer()
                 Text(formatTime(playback.duration))
             }
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
+            .font(theme.font(.caption))
+            .monospacedDigit()
+            .foregroundStyle(theme.secondaryLabel)
         }
     }
 
@@ -223,12 +225,12 @@ struct PlayerView: View {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Playback")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.label)
+                        .font(theme.font(.subheadline, weight: .semibold))
+                        .foregroundStyle(theme.label)
 
                     Text(playbackSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.font(.caption))
+                        .foregroundStyle(theme.secondaryLabel)
                         .multilineTextAlignment(.leading)
                 }
 
@@ -236,13 +238,13 @@ struct PlayerView: View {
 
                 VStack(alignment: .trailing, spacing: 6) {
                     Text(playbackPreferences.mode.displayName.uppercased())
-                        .font(.caption2.weight(.bold))
+                        .font(theme.font(.caption2, weight: .bold))
                         .kerning(0.8)
-                        .foregroundStyle(AppTheme.accent)
+                        .foregroundStyle(theme.accent)
 
                     Image(systemName: "slider.horizontal.3")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(AppTheme.label)
+                        .font(theme.font(.title3, weight: .semibold))
+                        .foregroundStyle(theme.label)
                 }
             }
             .padding(18)
@@ -251,14 +253,14 @@ struct PlayerView: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [AppTheme.panel, AppTheme.panel.opacity(0.92)],
+                            colors: [theme.panel, theme.panel.opacity(0.92)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                            .stroke(theme.chromeStroke, lineWidth: 1)
                     )
             )
         }
@@ -279,12 +281,12 @@ struct PlayerView: View {
                 }
             } label: {
                 Label(playback.isPlaying ? "Pause" : "Play", systemImage: playback.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.headline.weight(.semibold))
+                    .font(theme.font(.headline, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
             }
             .buttonStyle(.borderedProminent)
-            .tint(AppTheme.accent)
+            .tint(theme.accent)
             .disabled(selected == nil)
 
             if let selected {
@@ -294,7 +296,7 @@ struct PlayerView: View {
                     }
                 } label: {
                     Image(systemName: selected.isSaved ? "bookmark.fill" : "bookmark")
-                        .font(.title3.weight(.semibold))
+                        .font(theme.font(.title3, weight: .semibold))
                         .frame(width: 54, height: 54)
                 }
                 .buttonStyle(.bordered)
@@ -311,12 +313,12 @@ struct PlayerView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Playback")
-                    .font(.title3.bold())
-                    .foregroundStyle(AppTheme.label)
+                    .font(theme.font(.title3, weight: .bold))
+                    .foregroundStyle(theme.label)
 
                 Text(playbackHint)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(theme.font(.subheadline))
+                    .foregroundStyle(theme.secondaryLabel)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -339,7 +341,7 @@ struct PlayerView: View {
                         in: PlaybackSettings.speedRange,
                         step: 0.05
                     )
-                    .tint(AppTheme.accent)
+                    .tint(theme.accent)
                 }
 
                 if playbackPreferences.mode == .warp {
@@ -354,17 +356,17 @@ struct PlayerView: View {
                             in: PlaybackSettings.transposeRange,
                             step: 1
                         )
-                        .tint(AppTheme.accent)
+                        .tint(theme.accent)
                     }
                 }
             }
             .padding(18)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(AppTheme.panel)
+                    .fill(theme.panel)
                     .overlay(
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                            .stroke(theme.chromeStroke, lineWidth: 1)
                     )
             )
 
@@ -373,7 +375,7 @@ struct PlayerView: View {
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(AppTheme.bg.ignoresSafeArea())
+        .background(theme.bg.ignoresSafeArea())
         .presentationDetents([.height(playbackControlsHeight)])
         .presentationDragIndicator(.hidden)
     }
@@ -388,19 +390,20 @@ struct PlayerView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.label)
+                    .font(theme.font(.subheadline, weight: .semibold))
+                    .foregroundStyle(theme.label)
 
                 Spacer()
 
                 Button(resetLabel, action: resetAction)
-                    .font(.caption.weight(.semibold))
+                    .font(theme.font(.caption, weight: .semibold))
                     .buttonStyle(.plain)
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(theme.accent)
 
                 Text(valueLabel)
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(theme.font(.caption, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(theme.secondaryLabel)
             }
 
             content()

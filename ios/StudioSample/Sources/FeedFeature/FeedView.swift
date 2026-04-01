@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct FeedView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var playback: PlaybackController
     @EnvironmentObject private var playbackPreferences: PlaybackPreferencesStore
     @EnvironmentObject private var store: SampleLibraryStore
@@ -44,7 +45,7 @@ struct FeedView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 18)
             }
-            .background(AppTheme.bg)
+            .background(theme.bg)
             .navigationTitle("Fresh Samples")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -67,7 +68,7 @@ struct FeedView: View {
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
-                                .foregroundStyle(AppTheme.label)
+                                .foregroundStyle(theme.label)
                         }
                     }
                 }

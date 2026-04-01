@@ -3,17 +3,21 @@ import SwiftUI
 @main
 struct StudioSampleApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var appShell = AppShellStore()
 
     var body: some Scene {
         WindowGroup {
             RootTabView()
-                .preferredColorScheme(.dark)
+                .environmentObject(appShell)
+                .environment(\.appTheme, appShell.theme)
+                .font(appShell.theme.font(.body))
+                .preferredColorScheme(appShell.theme.colorScheme)
         }
     }
 }
 
 private struct RootTabView: View {
-    @StateObject private var appShell = AppShellStore()
+    @EnvironmentObject private var appShell: AppShellStore
     @StateObject private var playback = PlaybackController()
     @StateObject private var store: SampleLibraryStore
     @StateObject private var playbackPreferences = PlaybackPreferencesStore()
@@ -37,6 +41,8 @@ private struct RootTabView: View {
     }
 
     var body: some View {
+        let theme = appShell.theme
+
         TabView(selection: $appShell.selectedTab) {
             FeedView()
                 .tag(AppTab.feed)
@@ -62,8 +68,7 @@ private struct RootTabView: View {
                     Label("Settings", systemImage: "slider.horizontal.3")
                 }
         }
-        .tint(AppTheme.accent)
-        .environmentObject(appShell)
+        .tint(theme.accent)
         .environmentObject(playback)
         .environmentObject(store)
         .environmentObject(playbackPreferences)

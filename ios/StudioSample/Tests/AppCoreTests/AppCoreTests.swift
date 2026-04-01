@@ -148,6 +148,13 @@ final class AppCoreTests: XCTestCase {
         return url
     }
 
+    private func makeUserDefaults(testName: String = #function) -> UserDefaults {
+        let suiteName = "DreamCratesTests.\(testName).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
     private func makeSample(id: String, savedAt: Date?) -> SampleItem {
         SampleItem(
             id: id,
@@ -348,6 +355,37 @@ final class AppCoreTests: XCTestCase {
         XCTAssertEqual(repository.prepareDownloadCalls, 1)
         XCTAssertEqual(repository.resolvePlaybackCalls, 0)
         XCTAssertEqual(store.samples.first?.downloadState, .notDownloaded)
+    }
+
+    @MainActor
+    func testAppShellStorePersistsSelectedThemeOption() {
+        let defaults = makeUserDefaults()
+
+        let firstStore = AppShellStore(userDefaults: defaults)
+        firstStore.selectedThemeOption = .terminal
+
+        let secondStore = AppShellStore(userDefaults: defaults)
+
+        XCTAssertEqual(secondStore.selectedThemeOption, .terminal)
+        XCTAssertEqual(secondStore.theme.name, "terminal")
+    }
+
+    func testThemeCatalogIncludesRequestedPresets() {
+        let names = Set(AppThemeOption.allCases.map(\.displayName))
+
+        XCTAssertTrue(
+            names.isSuperset(of: [
+                "all dark",
+                "diddy party",
+                "dirtydishes",
+                "Davy Dolla$",
+                "Catppuccin Latte",
+                "Catppuccin Frappe",
+                "Catppuccin Macchiato",
+                "Catppuccin Mocha",
+                "terminal",
+            ])
+        )
     }
 
     @MainActor

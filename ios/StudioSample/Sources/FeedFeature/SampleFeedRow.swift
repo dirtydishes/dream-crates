@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SampleFeedRow: View {
+    @Environment(\.appTheme) private var theme
+
     let item: SampleItem
     let isActive: Bool
     let isPlaying: Bool
@@ -16,13 +18,13 @@ struct SampleFeedRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.uploaderName)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.label)
+                        .font(theme.font(.subheadline, weight: .semibold))
+                        .foregroundStyle(theme.label)
 
                     if let subtitle = item.uploaderSubtitle {
                         Text(subtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(theme.font(.caption))
+                            .foregroundStyle(theme.secondaryLabel)
                     }
                 }
 
@@ -40,8 +42,8 @@ struct SampleFeedRow: View {
             }
 
             Text(item.title)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(AppTheme.label)
+                .font(theme.font(.title3, weight: .semibold))
+                .foregroundStyle(theme.label)
                 .lineLimit(3)
 
             SampleArtworkView(url: item.artworkURL)
@@ -67,10 +69,7 @@ struct SampleFeedRow: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [
-                            Color(red: 0.18, green: 0.18, blue: 0.17),
-                            Color(red: 0.14, green: 0.14, blue: 0.13),
-                        ],
+                        colors: theme.cardGradient,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -78,9 +77,9 @@ struct SampleFeedRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(isActive ? AppTheme.accent.opacity(0.7) : Color.white.opacity(0.05), lineWidth: 1)
+                .stroke(isActive ? theme.activeStroke : theme.chromeStroke, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.22), radius: 16, x: 0, y: 10)
+        .shadow(color: theme.shadow, radius: 16, x: 0, y: 10)
     }
 
     private var relativeTimestamp: String {
@@ -89,32 +88,32 @@ struct SampleFeedRow: View {
 
     private func metaLabel(_ text: String, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(AppTheme.label.opacity(0.72))
+            .font(theme.font(.caption, weight: .medium))
+            .foregroundStyle(theme.secondaryLabel)
     }
 
     private func statusPill(_ text: String, systemImage: String, isEmphasized: Bool = false) -> some View {
         Label(text, systemImage: systemImage)
-            .font(.caption.weight(.semibold))
+            .font(theme.font(.caption, weight: .semibold))
             .lineLimit(1)
-            .foregroundStyle(isEmphasized ? Color.black.opacity(0.82) : AppTheme.label.opacity(0.82))
+            .foregroundStyle(isEmphasized ? theme.accentLabel : theme.label.opacity(0.84))
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(
                 Capsule()
-                    .fill(isEmphasized ? AppTheme.accent : Color.white.opacity(0.07))
+                    .fill(isEmphasized ? theme.accent : theme.surfaceFill)
             )
             .fixedSize(horizontal: true, vertical: false)
     }
 
     private func iconPill(systemImage: String) -> some View {
         Image(systemName: systemImage)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(AppTheme.label.opacity(0.82))
+            .font(theme.font(.caption, weight: .semibold))
+            .foregroundStyle(theme.label.opacity(0.82))
             .padding(9)
             .background(
                 Capsule()
-                    .fill(Color.white.opacity(0.07))
+                    .fill(theme.surfaceFill)
             )
     }
 
@@ -126,6 +125,8 @@ struct SampleFeedRow: View {
 }
 
 struct SampleArtworkView: View {
+    @Environment(\.appTheme) private var theme
+
     let url: URL?
 
     var body: some View {
@@ -133,11 +134,7 @@ struct SampleArtworkView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [
-                            AppTheme.accent.opacity(0.18),
-                            AppTheme.panel,
-                            Color.black.opacity(0.84),
-                        ],
+                        colors: theme.artworkGradient,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -150,23 +147,25 @@ struct SampleArtworkView: View {
                         .scaledToFill()
                 } placeholder: {
                     ProgressView()
-                        .tint(AppTheme.label)
+                        .tint(theme.label)
                 }
             } else {
                 Image(systemName: "waveform.circle.fill")
                     .font(.system(size: 40))
-                    .foregroundStyle(AppTheme.label.opacity(0.88))
+                    .foregroundStyle(theme.label.opacity(0.88))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                .stroke(theme.chromeStroke, lineWidth: 1)
         )
     }
 }
 
 struct UploaderAvatarView: View {
+    @Environment(\.appTheme) private var theme
+
     let imageURL: URL?
     let fallbackText: String
 
@@ -185,7 +184,7 @@ struct UploaderAvatarView: View {
             }
         }
         .clipShape(Circle())
-        .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
+        .overlay(Circle().stroke(theme.chromeStroke, lineWidth: 1))
     }
 
     private var avatarFallback: some View {
@@ -193,15 +192,15 @@ struct UploaderAvatarView: View {
             Circle()
                 .fill(
                     LinearGradient(
-                        colors: [AppTheme.accent.opacity(0.9), Color.orange.opacity(0.5)],
+                        colors: theme.avatarGradient,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
 
             Text(initials(from: fallbackText))
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.black.opacity(0.78))
+                .font(theme.font(.caption, weight: .bold))
+                .foregroundStyle(theme.accentLabel)
         }
     }
 

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0F2027E6ECCE4F3A7D4FF609 /* CaskaydiaCoveNerdFontMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B5F4DF6FCAD6132FF7C518E8 /* CaskaydiaCoveNerdFontMono-Bold.ttf */; };
 		1DF1CA124691BC74CE9BB388 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000D0CE483CDFAD326706A20 /* DeviceIdentity.swift */; };
 		2576D5621FBEF28CE252AAEB /* NotificationPreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E23B320F917CA9E3F031AF /* NotificationPreferencesStore.swift */; };
 		2B34445735038CA1B0E19AFA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD3BD4F2B9FF42D1AF5A1077 /* AppDelegate.swift */; };
@@ -14,9 +15,11 @@
 		31A8A8D767F13DD8FCD927A1 /* PlaybackEngines.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B0EC08E9885E38A329199CB /* PlaybackEngines.swift */; };
 		31D3BA51E2BC45AE227AF931 /* SampleLibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 808E773E9C286F147DEC2BB9 /* SampleLibraryStore.swift */; };
 		374790D9CE69F536098CC897 /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD59BCC02DCDCC5C253C5CB /* Channel.swift */; };
+		394DD68849989066522D593C /* CascadiaCode-NerdFont-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 30F9DCFE687A91ED6BA721A5 /* CascadiaCode-NerdFont-LICENSE.txt */; };
 		3BBC000BAAD0A2193A72E455 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 188233CAF79E1E48BAE3E27D /* SettingsView.swift */; };
 		3DF3CCC3027FC3CB3C84E5C2 /* SampleFeedRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA9D1AA3E796A8E6DB4A104F /* SampleFeedRow.swift */; };
 		3E034BD5495064560C1D4A2C /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C3D1B2551E6DE7151E062B /* FeedView.swift */; };
+		3F30EF9AF8BF28A445BF2C0C /* CaskaydiaCoveNerdFontMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1962FD4281E746017441327B /* CaskaydiaCoveNerdFontMono-Regular.ttf */; };
 		4783BB50E57268FB431EFBD9 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33B3A821E11629661B936FAC /* AppTheme.swift */; };
 		5D66400033B6AAC62C7D3AFC /* PlaybackSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B53356B5D09F9EEF2E22A16 /* PlaybackSettings.swift */; };
 		5E78A9C24682BE088711C043 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 610C95651E37194B6C0587FF /* PlayerView.swift */; };
@@ -49,10 +52,12 @@
 /* Begin PBXFileReference section */
 		000D0CE483CDFAD326706A20 /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		188233CAF79E1E48BAE3E27D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1962FD4281E746017441327B /* CaskaydiaCoveNerdFontMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "CaskaydiaCoveNerdFontMono-Regular.ttf"; sourceTree = "<group>"; };
 		19E679DC2B9F2FEAD0DAD6A8 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		22647032B316034B46606FE6 /* SampleRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleRepository.swift; sourceTree = "<group>"; };
 		25EDA976EFA0637F1CF95D40 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		2D157A73BBF39C419CFEC98E /* StudioSampleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioSampleApp.swift; sourceTree = "<group>"; };
+		30F9DCFE687A91ED6BA721A5 /* CascadiaCode-NerdFont-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "CascadiaCode-NerdFont-LICENSE.txt"; sourceTree = "<group>"; };
 		33B3A821E11629661B936FAC /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		4B0EC08E9885E38A329199CB /* PlaybackEngines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackEngines.swift; sourceTree = "<group>"; };
 		4CD59BCC02DCDCC5C253C5CB /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
@@ -68,6 +73,7 @@
 		871974B61C67CB0B0979A461 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
 		899CC4A3C0255AF5EB3C5A3C /* AppCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoreTests.swift; sourceTree = "<group>"; };
 		9B3A7E03322FA1F8A71C6585 /* PlaybackCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCache.swift; sourceTree = "<group>"; };
+		B5F4DF6FCAD6132FF7C518E8 /* CaskaydiaCoveNerdFontMono-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "CaskaydiaCoveNerdFontMono-Bold.ttf"; sourceTree = "<group>"; };
 		B6CA03CA28BED6683E3D34E6 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		C8C3D1B2551E6DE7151E062B /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		D0E23B320F917CA9E3F031AF /* NotificationPreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPreferencesStore.swift; sourceTree = "<group>"; };
@@ -80,6 +86,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		0D4F4CCD2152984313220ADE /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				30F9DCFE687A91ED6BA721A5 /* CascadiaCode-NerdFont-LICENSE.txt */,
+				B5F4DF6FCAD6132FF7C518E8 /* CaskaydiaCoveNerdFontMono-Bold.ttf */,
+				1962FD4281E746017441327B /* CaskaydiaCoveNerdFontMono-Regular.ttf */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
 		12E5C1B643FECEB96DE8FE8B /* Support */ = {
 			isa = PBXGroup;
 			children = (
@@ -123,6 +139,7 @@
 				BD0083D6262B7186361BDA41 /* Models */,
 				9E253E899B4FBC9B830047FC /* Networking */,
 				A5F30DFE825D6568CEB2BD60 /* Repositories */,
+				C4E101EDD946CFED85EE650B /* Resources */,
 				80BA021C69918597CF68C8FA /* State */,
 				12E5C1B643FECEB96DE8FE8B /* Support */,
 			);
@@ -220,6 +237,14 @@
 			);
 			sourceTree = "<group>";
 		};
+		C4E101EDD946CFED85EE650B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0D4F4CCD2152984313220ADE /* Fonts */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		E77CF34959DB5914CFCD90D7 /* AppCoreTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -244,6 +269,7 @@
 			buildConfigurationList = 901B02AC53F4E737F2A2FDFD /* Build configuration list for PBXNativeTarget "StudioSampleApp" */;
 			buildPhases = (
 				FFC2007E177C4E7DEE8B8057 /* Sources */,
+				CD7BFF881369F1ABF0060913 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -304,6 +330,19 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CD7BFF881369F1ABF0060913 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				394DD68849989066522D593C /* CascadiaCode-NerdFont-LICENSE.txt in Resources */,
+				0F2027E6ECCE4F3A7D4FF609 /* CaskaydiaCoveNerdFontMono-Bold.ttf in Resources */,
+				3F30EF9AF8BF28A445BF2C0C /* CaskaydiaCoveNerdFontMono-Regular.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		8C7FC85D4DA6A2B05A480C0D /* Sources */ = {

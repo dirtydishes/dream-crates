@@ -28,6 +28,9 @@ targets:
         CFBundleDisplayName: "Dream Crates"
         NSHumanReadableCopyright: "Copyright © 2026 deepdream llc"
         NSUserTrackingUsageDescription: "Dream Crates does not track you across apps."
+        UIAppFonts:
+          - CaskaydiaCoveNerdFontMono-Regular.ttf
+          - CaskaydiaCoveNerdFontMono-Bold.ttf
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dreamcrates.studiosample
