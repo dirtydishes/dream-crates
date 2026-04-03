@@ -16,13 +16,13 @@ Current active work includes the new playback transposition modes. `Warp` and `T
 
 ## App Screens
 
-| Feed | Player |
+| Fresh Samples | Studio Deck |
 | --- | --- |
-| ![Feed](docs/screenshots/feed.png) | ![Player](docs/screenshots/player.png) |
+| ![Fresh Samples](docs/screenshots/feed.png) | ![Studio Deck](docs/screenshots/player.png) |
 
-| Library | Settings |
+| Library | Library Downloaded |
 | --- | --- |
-| ![Library](docs/screenshots/library.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Library](docs/screenshots/library.png) | ![Library Downloaded](docs/screenshots/library-downloaded.png) |
 
 ## Project Progress
 
